@@ -11,14 +11,31 @@ export async function GET(request: NextRequest) {
 
     console.log('[ImageProxy] 代理图片请求:', imageUrl)
 
-    // 获取图片，尝试添加认证头
-    const response = await fetch(imageUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Authorization': 'Bearer app-ZxqRT3IdtQV0tRGp3O0nsLf2', // 使用Dify API Key
-        'Accept': 'image/*,*/*'
-      }
-    })
+    // 获取图片，处理DIFY格式的URL
+    let response: Response
+    let finalUrl = imageUrl
+
+    // 如果是相对路径，转换为完整的DIFY URL
+    if (imageUrl.startsWith('/files/')) {
+      // 从请求头或查询参数中获取DIFY基础URL
+      const difyBaseUrl = request.headers.get('x-dify-base-url') || 'http://43.139.167.250:9005'
+      finalUrl = `${difyBaseUrl}${imageUrl}`
+      console.log('[ImageProxy] 转换相对路径为完整URL:', finalUrl)
+    }
+
+    try {
+      response = await fetch(finalUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'image/*,*/*'
+        }
+      })
+
+      console.log('[ImageProxy] 图片请求状态:', response.status, response.statusText)
+    } catch (error) {
+      console.error('[ImageProxy] 图片请求异常:', error)
+      throw error
+    }
 
     if (!response.ok) {
       console.error('[ImageProxy] 图片获取失败:', response.status, response.statusText)

@@ -53,12 +53,13 @@ export default function SimpleContentRenderer({
       return `<${type} style="${style}">${content}</${type}>`
     }
 
-    // 自定义图片渲染 - 深色主题
+    // 自定义图片渲染 - 深色主题，缩小图片尺寸
     renderer.image = (href: string, title: string | null, text: string) => {
       return `<div class="image-container" style="margin: 15px 0; text-align: center;">
         <img src="${href}" alt="${text}" title="${title || ''}"
-             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);"
+             style="max-width: 400px; max-height: 300px; width: auto; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); cursor: pointer;"
              onload="this.style.opacity='1'"
+             onclick="window.open('${href}', '_blank')"
              onerror="this.parentElement.innerHTML='<div style=\\'padding: 20px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #fca5a5;\\'>图片加载失败</div>'"
              style="opacity: 0; transition: opacity 0.3s;">
       </div>`

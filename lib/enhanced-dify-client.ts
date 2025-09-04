@@ -195,6 +195,14 @@ export class EnhancedDifyClient {
               // 保存消息ID
               if (data.id) messageId = data.id
 
+              // 保存会话ID - 这是关键修复！
+              if (data.conversation_id) {
+                conversationIdFromResponse = data.conversation_id
+                // 更新客户端的会话ID
+                this.conversationId = data.conversation_id
+                console.log('[DifyClient] 更新会话ID:', data.conversation_id)
+              }
+
               // 处理内容增量
               if (delta?.content) {
                 fullResponse += delta.content
@@ -202,6 +210,7 @@ export class EnhancedDifyClient {
                   type: 'content',
                   content: delta.content,
                   messageId: messageId || undefined,
+                  conversationId: conversationIdFromResponse || undefined,
                   isComplete: false
                 })
               }
@@ -444,6 +453,129 @@ export class EnhancedDifyClient {
    */
   setConversationId(id: string | null) {
     this.conversationId = id
+  }
+
+  /**
+   * 上传文件到DIFY
+   */
+  async uploadFile(file: File): Promise<string> {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('user', this.config.userId)
+
+      const response = await fetch(`${this.config.baseURL}/files/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(`文件上传失败: ${response.status} ${errorData.message || response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('[DifyClient] 文件上传成功:', data)
+      return data.id // 返回upload_file_id
+    } catch (error) {
+      console.error('[DifyClient] 文件上传失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 获取会话列表
+   */
+  async getConversations(limit: number = 20, lastId?: string): Promise<any> {
+    try {
+      const params = new URLSearchParams({
+        user: this.config.userId,
+        limit: limit.toString()
+      })
+
+      if (lastId) {
+        params.append('last_id', lastId)
+      }
+
+      const response = await fetch(`${this.config.baseURL}/conversations?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`获取会话列表失败: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[DifyClient] 获取会话列表失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 删除会话
+   */
+  async deleteConversation(conversationId: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.config.baseURL}/conversations/${conversationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          user: this.config.userId
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(`删除会话失败: ${response.status} ${errorData.message || response.statusText}`)
+      }
+
+      console.log('[DifyClient] 会话删除成功:', conversationId)
+    } catch (error) {
+      console.error('[DifyClient] 删除会话失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 重命名会话
+   */
+  async renameConversation(conversationId: string, name: string, autoGenerate: boolean = false): Promise<any> {
+    try {
+      const response = await fetch(`${this.config.baseURL}/conversations/${conversationId}/name`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: autoGenerate ? '' : name,
+          auto_generate: autoGenerate,
+          user: this.config.userId
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(`重命名会话失败: ${response.status} ${errorData.message || response.statusText}`)
+      }
+
+      const result = await response.json()
+      console.log('[DifyClient] 会话重命名成功:', result)
+      return result
+    } catch (error) {
+      console.error('[DifyClient] 重命名会话失败:', error)
+      throw error
+    }
   }
 
   /**

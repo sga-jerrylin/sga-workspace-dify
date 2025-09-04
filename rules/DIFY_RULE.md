@@ -253,4 +253,624 @@ curl -X POST 'http://192.144.232.60/v1/files/upload' \
 - 上传的文件仅供当前终端用户使用。
 - trace_id 支持 Header（X-Trace-Id）、Query、Body 三种方式传递，优先级依次为 Header > Query > Body。
 
+GET
+/messages
+获取会话历史消息
+滚动加载形式返回历史聊天记录，第一页返回最新 limit 条，即：倒序返回。
+
+Query
+Name
+conversation_id
+Type
+string
+Description
+会话 ID
+
+Name
+user
+Type
+string
+Description
+用户标识，由开发者定义规则，需保证用户标识在应用内唯一。
+
+Name
+first_id
+Type
+string
+Description
+当前页第一条聊天记录的 ID，默认 null
+
+Name
+limit
+Type
+int
+Description
+一次请求返回多少条聊天记录，默认 20 条。
+
+Response
+data (array[object]) 消息列表
+id (string) 消息 ID
+conversation_id (string) 会话 ID
+inputs (object) 用户输入参数。
+query (string) 用户输入 / 提问内容。
+message_files (array[object]) 消息文件
+id (string) ID
+type (string) 文件类型，image 图片
+url (string) 文件预览地址，使用文件预览 API (/files/{file_id}/preview) 访问文件
+belongs_to (string) 文件归属方，user 或 assistant
+answer (string) 回答消息内容
+created_at (timestamp) 创建时间
+feedback (object) 反馈信息
+rating (string) 点赞 like / 点踩 dislike
+retriever_resources (array[RetrieverResource]) 引用和归属分段列表
+has_more (bool) 是否存在下一页
+limit (int) 返回条数，若传入超过系统限制，返回系统限制数量
+Request Example
+Request
+GET
+/messages
+curl -X GET 'http://43.139.167.250/v1/messages?user=abc-123&conversation_id=' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response Example
+Response
+{
+"limit": 20,
+"has_more": false,
+"data": [
+    {
+        "id": "a076a87f-31e5-48dc-b452-0061adbbc922",
+        "conversation_id": "cd78daf6-f9e4-4463-9ff2-54257230a0ce",
+        "inputs": {
+            "name": "dify"
+        },
+        "query": "iphone 13 pro",
+        "answer": "The iPhone 13 Pro, released on September 24, 2021, features a 6.1-inch display with a resolution of 1170 x 2532. It is equipped with a Hexa-core (2x3.23 GHz Avalanche + 4x1.82 GHz Blizzard) processor, 6 GB of RAM, and offers storage options of 128 GB, 256 GB, 512 GB, and 1 TB. The camera is 12 MP, the battery capacity is 3095 mAh, and it runs on iOS 15.",
+        "message_files": [],
+        "feedback": null,
+        "retriever_resources": [
+            {
+                "position": 1,
+                "dataset_id": "101b4c97-fc2e-463c-90b1-5261a4cdcafb",
+                "dataset_name": "iPhone",
+                "document_id": "8dd1ad74-0b5f-4175-b735-7d98bbbb4e00",
+                "document_name": "iPhone List",
+                "segment_id": "ed599c7f-2766-4294-9d1d-e5235a61270a",
+                "score": 0.98457545,
+                "content": "\"Model\",\"Release Date\",\"Display Size\",\"Resolution\",\"Processor\",\"RAM\",\"Storage\",\"Camera\",\"Battery\",\"Operating System\"\n\"iPhone 13 Pro Max\",\"September 24, 2021\",\"6.7 inch\",\"1284 x 2778\",\"Hexa-core (2x3.23 GHz Avalanche + 4x1.82 GHz Blizzard)\",\"6 GB\",\"128, 256, 512 GB, 1TB\",\"12 MP\",\"4352 mAh\",\"iOS 15\""
+            }
+        ],
+        "created_at": 1705569239
+    }
+  ]
+}
+
+Copy
+Copied!
+Response Example(智能助手)
+Response
+{
+"limit": 20,
+"has_more": false,
+"data": [
+    {
+        "id": "d35e006c-7c4d-458f-9142-be4930abdf94",
+        "conversation_id": "957c068b-f258-4f89-ba10-6e8a0361c457",
+        "inputs": {},
+        "query": "draw a cat",
+        "answer": "I have generated an image of a cat for you. Please check your messages to view the image.",
+        "message_files": [
+            {
+                "id": "976990d2-5294-47e6-8f14-7356ba9d2d76",
+                "type": "image",
+                "url": "http://127.0.0.1:5001/files/tools/976990d2-5294-47e6-8f14-7356ba9d2d76.png?timestamp=1705988524&nonce=55df3f9f7311a9acd91bf074cd524092&sign=z43nMSO1L2HBvoqADLkRxr7Biz0fkjeDstnJiCK1zh8=",
+                "belongs_to": "assistant"
+            }
+        ],
+        "feedback": null,
+        "retriever_resources": [],
+        "created_at": 1705988187
+    }
+    ]
+}
+
+Copy
+Copied!
+GET
+/conversations
+获取会话列表
+获取当前用户的会话列表，默认返回最近的 20 条。
+
+Query
+Name
+user
+Type
+string
+Description
+用户标识，由开发者定义规则，需保证用户标识在应用内唯一。
+
+Name
+last_id
+Type
+string
+Description
+（选填）当前页最后面一条记录的 ID，默认 null
+
+Name
+limit
+Type
+int
+Description
+（选填）一次请求返回多少条记录，默认 20 条，最大 100 条，最小 1 条。
+
+Name
+sort_by
+Type
+string
+Description
+（选填）排序字段，默认 -updated_at(按更新时间倒序排列)
+
+可选值：created_at, -created_at, updated_at, -updated_at
+字段前面的符号代表顺序或倒序，-代表倒序
+Response
+data (array[object]) 会话列表
+id (string) 会话 ID
+name (string) 会话名称，默认由大语言模型生成。
+inputs (object) 用户输入参数。
+status (string) 会话状态
+introduction (string) 开场白
+created_at (timestamp) 创建时间
+updated_at (timestamp) 更新时间
+has_more (bool)
+limit (int) 返回条数，若传入超过系统限制，返回系统限制数量
+Request
+GET
+/conversations
+curl -X GET 'http://43.139.167.250/v1/conversations?user=abc-123&last_id=&limit=20'\
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "limit": 20,
+  "has_more": false,
+  "data": [
+    {
+      "id": "10799fb8-64f7-4296-bbf7-b42bfbe0ae54",
+      "name": "New chat",
+      "inputs": {
+          "book": "book",
+          "myName": "Lucy"
+      },
+      "status": "normal",
+      "created_at": 1679667915,
+      "updated_at": 1679667915
+    },
+    {
+      "id": "hSIhXBhNe8X1d8Et"
+      // ...
+    }
+  ]
+}
+
+Copy
+Copied!
+DELETE
+/conversations/:conversation_id
+删除会话
+删除会话。
+
+Path
+conversation_id (string) 会话 ID
+Request Body
+Name
+user
+Type
+string
+Description
+用户标识，由开发者定义规则，需保证用户标识在应用内唯一。
+
+Response
+result (string) 固定返回 success
+Request
+DELETE
+/conversations/:conversation_id
+curl -X DELETE 'http://43.139.167.250/v1/conversations/:conversation_id' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{ 
+ "user": "abc-123"
+}'
+
+Copy
+Copied!
+Response
+204 No Content
+
+Copy
+Copied!
+POST
+/conversations/:conversation_id/name
+会话重命名
+对会话进行重命名，会话名称用于显示在支持多会话的客户端上。
+
+Path
+conversation_id (string) 会话 ID
+Request Body
+Name
+name
+Type
+string
+Description
+（选填）名称，若 auto_generate 为 true 时，该参数可不传。
+
+Name
+auto_generate
+Type
+bool
+Description
+（选填）自动生成标题，默认 false。
+
+Name
+user
+Type
+string
+Description
+用户标识，由开发者定义规则，需保证用户标识在应用内唯一。
+
+Response
+id (string) 会话 ID
+name (string) 会话名称
+inputs (object) 用户输入参数
+status (string) 会话状态
+introduction (string) 开场白
+created_at (timestamp) 创建时间
+updated_at (timestamp) 更新时间
+Request
+POST
+/conversations/:conversation_id/name
+curl -X POST 'http://43.139.167.250/v1/conversations/:conversation_id/name' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{ 
+ "name": "", 
+ "auto_generate": true, 
+ "user": "abc-123"
+}'
+
+Copy
+Copied!
+Response
+{
+  "id": "34d511d5-56de-4f16-a997-57b379508443",
+  "name": "hello",
+  "inputs": {},
+  "status": "normal",
+  "introduction": "",
+  "created_at": 1732731141,
+  "updated_at": 1732734510
+}
+
+Copy
+Copied!
+GET
+/conversations/:conversation_id/variables
+获取对话变量
+从特定对话中检索变量。此端点对于提取对话过程中捕获的结构化数据非常有用。
+
+路径参数
+Name
+conversation_id
+Type
+string
+Description
+要从中检索变量的对话ID。
+
+查询参数
+Name
+user
+Type
+string
+Description
+用户标识符，由开发人员定义的规则，在应用程序内必须唯一。
+
+Name
+last_id
+Type
+string
+Description
+（选填）当前页最后面一条记录的 ID，默认 null
+
+Name
+limit
+Type
+int
+Description
+（选填）一次请求返回多少条记录，默认 20 条，最大 100 条，最小 1 条。
+
+响应
+limit (int) 每页项目数
+has_more (bool) 是否有更多项目
+data (array[object]) 变量列表
+id (string) 变量 ID
+name (string) 变量名称
+value_type (string) 变量类型（字符串、数字、布尔等）
+value (string) 变量值
+description (string) 变量描述
+created_at (int) 创建时间戳
+updated_at (int) 最后更新时间戳
+错误
+404, conversation_not_exists, 对话不存在
+Request
+GET
+/conversations/:conversation_id/variables
+curl -X GET 'http://43.139.167.250/v1/conversations/{conversation_id}/variables?user=abc-123' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Request with variable name filter
+curl -X GET '${props.appDetail.api_base_url}/conversations/{conversation_id}/variables?user=abc-123&variable_name=customer_name' \
+--header 'Authorization: Bearer {api_key}'
+
+Copy
+Copied!
+Response
+{
+  "limit": 100,
+  "has_more": false,
+  "data": [
+    {
+      "id": "variable-uuid-1",
+      "name": "customer_name",
+      "value_type": "string",
+      "value": "John Doe",
+      "description": "客户名称（从对话中提取）",
+      "created_at": 1650000000000,
+      "updated_at": 1650000000000
+    },
+    {
+      "id": "variable-uuid-2",
+      "name": "order_details",
+      "value_type": "json",
+      "value": "{\"product\":\"Widget\",\"quantity\":5,\"price\":19.99}",
+      "description": "客户的订单详情",
+      "created_at": 1650000000000,
+      "updated_at": 1650000000000
+    }
+  ]
+}
+
+Copy
+Copied!
+PUT
+/conversations/:conversation_id/variables/:variable_id
+更新对话变量
+更新特定对话变量的值。此端点允许您修改在对话过程中捕获的变量值，同时保留其名称、类型和描述。
+
+路径参数
+Name
+conversation_id
+Type
+string
+Description
+包含要更新变量的对话ID。
+
+Name
+variable_id
+Type
+string
+Description
+要更新的变量ID。
+
+请求体
+Name
+value
+Type
+any
+Description
+变量的新值。必须匹配变量的预期类型（字符串、数字、对象等）。
+
+Name
+user
+Type
+string
+Description
+用户标识符，由开发人员定义的规则，在应用程序内必须唯一。
+
+响应
+返回包含以下内容的更新变量对象：
+
+id (string) 变量ID
+name (string) 变量名称
+value_type (string) 变量类型（字符串、数字、对象等）
+value (any) 更新后的变量值
+description (string) 变量描述
+created_at (int) 创建时间戳
+updated_at (int) 最后更新时间戳
+错误
+400, Type mismatch: variable expects {expected_type}, but got {actual_type} type, 值类型与变量的预期类型不匹配
+404, conversation_not_exists, 对话不存在
+404, conversation_variable_not_exists, 变量不存在
+Request
+PUT
+/conversations/:conversation_id/variables/:variable_id
+curl -X PUT 'http://43.139.167.250/v1/conversations/{conversation_id}/variables/{variable_id}' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "value": "Updated Value",
+  "user": "abc-123"
+}'
+
+Copy
+Copied!
+使用不同值类型更新
+Code
+Code
+Code
+curl -X PUT '${props.appDetail.api_base_url}/conversations/{conversation_id}/variables/{variable_id}' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer {api_key}' \
+--data-raw '{
+    "value": "新的字符串值",
+    "user": "abc-123"
+}'
+
+Copy
+Copied!
+Response
+{
+  "id": "variable-uuid-1",
+  "name": "customer_name",
+  "value_type": "string",
+  "value": "Updated Value",
+  "description": "客户名称（从对话中提取）",
+  "created_at": 1650000000000,
+  "updated_at": 1650000001000
+}
+
+Copy
+Copied!
 ---
+POST
+/chat-messages
+发送对话消息
+创建会话消息。
+
+Request Body
+Name
+query
+Type
+string
+Description
+用户输入/提问内容。
+
+Name
+inputs
+Type
+object
+Description
+允许传入 App 定义的各变量值。 inputs 参数包含了多组键值对（Key/Value pairs），每组的键对应一个特定变量，每组的值则是该变量的具体值。 如果变量是文件类型，请指定一个包含以下 files 中所述键的对象。 默认 {}
+
+Name
+response_mode
+Type
+string
+Description
+streaming 流式模式（推荐）。基于 SSE（Server-Sent Events）实现类似打字机输出方式的流式返回。
+blocking 阻塞模式，等待执行完毕后返回结果。（请求若流程较长可能会被中断）。 由于 Cloudflare 限制，请求会在 100 秒超时无返回后中断。
+Name
+user
+Type
+string
+Description
+用户标识，用于定义终端用户的身份，方便检索、统计。 由开发者定义规则，需保证用户标识在应用内唯一。服务 API 不会共享 WebApp 创建的对话。
+
+Name
+conversation_id
+Type
+string
+Description
+（选填）会话 ID，需要基于之前的聊天记录继续对话，必须传之前消息的 conversation_id。
+
+Name
+files
+Type
+array[object]
+Description
+文件列表，适用于传入文件结合文本理解并回答问题，仅当模型支持 Vision 能力时可用。
+
+type (string) 支持类型：
+document 具体类型包含：'TXT', 'MD', 'MARKDOWN', 'PDF', 'HTML', 'XLSX', 'XLS', 'DOCX', 'CSV', 'EML', 'MSG', 'PPTX', 'PPT', 'XML', 'EPUB'
+image 具体类型包含：'JPG', 'JPEG', 'PNG', 'GIF', 'WEBP', 'SVG'
+audio 具体类型包含：'MP3', 'M4A', 'WAV', 'WEBM', 'AMR'
+video 具体类型包含：'MP4', 'MOV', 'MPEG', 'MPGA'
+custom 具体类型包含：其他文件类型
+transfer_method (string) 传递方式:
+remote_url: 图片地址。
+local_file: 上传文件。
+url 图片地址。（仅当传递方式为 remote_url 时）。
+upload_file_id 上传文件 ID。（仅当传递方式为 local_file 时）。
+Name
+auto_generate_name
+Type
+bool
+Description
+（选填）自动生成标题，默认 true。 若设置为 false，则可通过调用会话重命名接口并设置 auto_generate 为 true 实现异步生成标题。
+
+Name
+workflow_id
+Type
+string
+Description
+（选填）工作流ID，用于指定特定版本，如果不提供则使用默认的已发布版本。
+
+Name
+trace_id
+Type
+string
+Description
+（选填）链路追踪ID。适用于与业务系统已有的trace组件打通，实现端到端分布式追踪等场景。如果未指定，系统会自动生成trace_id。支持以下三种方式传递，具体优先级依次为：
+
+Header：通过 HTTP Header X-Trace-Id 传递，优先级最高。
+Query 参数：通过 URL 查询参数 trace_id 传递。
+Request Body：通过请求体字段 trace_id 传递（即本字段）。
+
+curl -X POST 'http://43.139.167.250/v1/chat-messages' \
+--header 'Authorization: Bearer {api_key}' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "inputs": {},
+    "query": "What are the specs of the iPhone 13 Pro Max?",
+    "response_mode": "streaming",
+    "conversation_id": "",
+    "user": "abc-123",
+    "files": [
+      {
+        "type": "image",
+        "transfer_method": "remote_url",
+        "url": "https://cloud.dify.ai/logo/logo-site.png"
+      }
+    ]
+}'{
+    "event": "message",
+    "task_id": "c3800678-a077-43df-a102-53f23ed20b88", 
+    "id": "9da23599-e713-473b-982c-4328d4f5c78a",
+    "message_id": "9da23599-e713-473b-982c-4328d4f5c78a",
+    "conversation_id": "45701982-8118-4bc5-8e9b-64562b4555f2",
+    "mode": "chat",
+    "answer": "iPhone 13 Pro Max specs are listed here:...",
+    "metadata": {
+        "usage": {
+            "prompt_tokens": 1033,
+            "prompt_unit_price": "0.001",
+            "prompt_price_unit": "0.001",
+            "prompt_price": "0.0010330",
+            "completion_tokens": 128,
+            "completion_unit_price": "0.002",
+            "completion_price_unit": "0.001",
+            "completion_price": "0.0002560",
+            "total_tokens": 1161,
+            "total_price": "0.0012890",
+            "currency": "USD",
+            "latency": 0.7682376249867957
+        },
+        "retriever_resources": [
+            {
+                "position": 1,
+                "dataset_id": "101b4c97-fc2e-463c-90b1-5261a4cdcafb",
+                "dataset_name": "iPhone",
+                "document_id": "8dd1ad74-0b5f-4175-b735-7d98bbbb4e00",
+                "document_name": "iPhone List",
+                "segment_id": "ed599c7f-2766-4294-9d1d-e5235a61270a",
+                "score": 0.98457545,
+                "content": "\"Model\",\"Release Date\",\"Display Size\",\"Resolution\",\"Processor\",\"RAM\",\"Storage\",\"Camera\",\"Battery\",\"Operating System\"\n\"iPhone 13 Pro Max\",\"September 24, 2021\",\"6.7 inch\",\"1284 x 2778\",\"Hexa-core (2x3.23 GHz Avalanche + 4x1.82 GHz Blizzard)\",\"6 GB\",\"128, 256, 512 GB, 1TB\",\"12 MP\",\"4352 mAh\",\"iOS 15\""
+            }
+        ]
+    },
+    "created_at": 1705407629
+}

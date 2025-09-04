@@ -3,35 +3,50 @@
 import React from 'react'
 import { Download, FileText, Image, File, Eye } from 'lucide-react'
 
+interface FileAttachment {
+  id: string
+  name: string
+  type: string
+  size: number
+  url?: string
+  base64Data?: string
+  uploadFileId?: string
+  source: 'user' | 'agent'
+}
+
 interface FileCardProps {
-  fileName: string
-  fileUrl: string
-  fileSize?: number
-  fileType?: string
+  attachment: FileAttachment
   onDownload?: () => void
   onPreview?: () => void
 }
 
 const FileCard: React.FC<FileCardProps> = ({
-  fileName,
-  fileUrl,
-  fileSize,
-  fileType,
+  attachment,
   onDownload,
   onPreview
 }) => {
+  const { name: fileName, url: fileUrl, size: fileSize, type: fileType } = attachment
+
   // 获取文件图标
   const getFileIcon = () => {
     if (!fileType) return <File className="w-8 h-8 text-gray-500" />
-    
+
     if (fileType.startsWith('image/')) {
       return <Image className="w-8 h-8 text-blue-500" />
-    } else if (fileType.includes('document') || fileType.includes('word')) {
+    } else if (fileType.includes('document') || fileType.includes('word') ||
+               fileType === 'application/msword' ||
+               fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
       return <FileText className="w-8 h-8 text-blue-600" />
     } else if (fileType.includes('pdf')) {
       return <FileText className="w-8 h-8 text-red-500" />
-    } else if (fileType.includes('excel') || fileType.includes('spreadsheet')) {
+    } else if (fileType.includes('excel') || fileType.includes('spreadsheet') ||
+               fileType === 'application/vnd.ms-excel' ||
+               fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
       return <FileText className="w-8 h-8 text-green-600" />
+    } else if (fileType.includes('powerpoint') || fileType.includes('presentation') ||
+               fileType === 'application/vnd.ms-powerpoint' ||
+               fileType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+      return <FileText className="w-8 h-8 text-orange-600" />
     } else {
       return <File className="w-8 h-8 text-gray-500" />
     }

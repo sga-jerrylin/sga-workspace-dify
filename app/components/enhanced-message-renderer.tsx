@@ -96,14 +96,14 @@ export default function EnhancedMessageRenderer({
     )
   }
 
-  // 渲染图片
+  // 渲染图片 - 缩小尺寸
   const renderImage = ({ src, alt, ...props }: any) => {
     return (
       <div className="my-4">
         <img
           src={src}
           alt={alt}
-          className="max-w-full h-auto rounded-lg shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
+          className="max-w-96 max-h-72 w-auto h-auto rounded-lg shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
           onClick={() => {
             // 在新窗口中打开图片
             window.open(src, '_blank')
@@ -143,14 +143,14 @@ export default function EnhancedMessageRenderer({
   const renderAttachment = (attachment: FileAttachment) => {
     const isImage = attachment.type.startsWith('image/')
 
-    // 对于图片，保持原有的显示方式
+    // 对于图片，缩小显示尺寸
     if (isImage && (attachment.url || attachment.base64)) {
       return (
         <div key={attachment.id} className="my-3">
           <img
             src={attachment.url || attachment.base64}
             alt={attachment.name}
-            className="max-w-full h-auto rounded-lg shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
+            className="max-w-96 max-h-72 w-auto h-auto rounded-lg shadow-lg cursor-pointer hover:shadow-xl transition-shadow"
             onClick={() => {
               window.open(attachment.url || attachment.base64, '_blank')
             }}

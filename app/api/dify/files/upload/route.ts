@@ -38,11 +38,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 验证文件类型和大小
+    // 验证文件类型和大小 - 根据DIFY新规则支持更多类型
     const allowedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-      'application/pdf', 'text/plain', 'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      // 图片类型
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+      // 文档类型
+      'application/pdf', 'text/plain', 'text/markdown', 'text/html',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv', 'message/rfc822', 'application/vnd.ms-outlook',
+      'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/xml', 'application/epub+zip',
+      // 音频类型
+      'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/webm', 'audio/amr',
+      // 视频类型
+      'video/mp4', 'video/quicktime', 'video/mpeg', 'video/x-msvideo'
     ];
 
     if (!allowedTypes.includes(file.type)) {
