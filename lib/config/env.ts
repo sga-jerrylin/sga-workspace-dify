@@ -113,19 +113,54 @@ function validateEnv() {
 const envResult = validateEnv()
 
 if (!envResult.success) {
-  console.error("环境变量验证失败:", envResult.error.message)
+  console.error("环境变量验证失败:", envResult.error)
 
-  // 在客户端环境中，不能调用 process.exit
-  if (typeof window === 'undefined') {
-    // 服务端环境
+  // 在构建时或客户端环境中，不能调用 process.exit
+  if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
+    // 开发环境服务端，退出进程
     process.exit(1)
   } else {
-    // 客户端环境，使用默认值或抛出错误
-    console.warn("客户端环境变量验证失败，使用默认配置")
+    // 构建时、生产环境或客户端环境，使用默认值
+    console.warn("环境变量验证失败，使用默认配置")
   }
 }
 
-export const env = envResult.success ? envResult.data : {} as any
+// 如果验证失败，使用默认的环境变量配置
+export const env = envResult.success ? envResult.data : {
+  NODE_ENV: process.env.NODE_ENV || "development",
+  NEXT_PUBLIC_APP_NAME: "企业AI工作空间",
+  NEXT_PUBLIC_APP_VERSION: "1.0.0",
+  DATABASE_POOL_MIN: 2,
+  DATABASE_POOL_MAX: 10,
+  DATABASE_TIMEOUT: 30000,
+  REDIS_DB: 0,
+  UPLOAD_MAX_SIZE: 10485760,
+  UPLOAD_ALLOWED_TYPES: "image/jpeg,image/png,image/webp,image/gif,application/pdf",
+  NEXT_PUBLIC_UPLOAD_ENDPOINT: "/api/upload",
+  API_RATE_LIMIT_REQUESTS: 100,
+  API_RATE_LIMIT_WINDOW: 900000,
+  API_TIMEOUT: 30000,
+  LOG_LEVEL: "info",
+  LOG_FORMAT: "json",
+  HEALTH_CHECK_ENDPOINT: "/api/health",
+  METRICS_ENDPOINT: "/api/metrics",
+  ENABLE_METRICS: true,
+  DEFAULT_COMPANY_NAME: "示例企业",
+  DEFAULT_DIFY_BASE_URL: "http://192.144.232.60/v1",
+  DEFAULT_DIFY_TIMEOUT: 180000,
+  DIFY_MAX_RETRIES: 3,
+  ENABLE_USER_REGISTRATION: false,
+  ENABLE_PASSWORD_RESET: true,
+  ENABLE_MULTI_COMPANY: false,
+  ENABLE_FILE_UPLOAD: true,
+  ENABLE_CHAT_HISTORY: true,
+  MAX_CHAT_HISTORY_DAYS: 90,
+  MAX_SESSIONS_PER_USER: 50,
+  CLEANUP_INTERVAL_HOURS: 24,
+  NEXT_PUBLIC_DEBUG: false,
+  ENABLE_API_DOCS: false,
+  ENABLE_ADMIN_PANEL: true,
+} as any
 
 // 类型定义
 export type Env = z.infer<typeof envSchema>

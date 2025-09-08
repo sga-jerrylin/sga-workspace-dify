@@ -12,12 +12,19 @@ COPY package*.json ./
 
 # 安装依赖阶段
 FROM base AS deps
-RUN npm ci --only=production
+RUN npm ci --only=production --legacy-peer-deps
 
 # 构建阶段
 FROM base AS builder
 COPY . .
-RUN npm ci
+RUN npm ci --legacy-peer-deps
+# 设置构建时的假环境变量，避免构建错误
+ENV DATABASE_URL="postgresql://user:pass@localhost:5432/db"
+ENV CSRF_SECRET="fake-csrf-secret-for-build-only-32chars"
+ENV JWT_SECRET="fake-jwt-secret-for-build-only-32chars"
+ENV ENCRYPTION_KEY="fake-encryption-key-for-build-32"
+ENV DEFAULT_ADMIN_EMAIL="admin@example.com"
+ENV DEFAULT_ADMIN_PASSWORD="password123"
 RUN npm run build
 
 # 生产运行阶段
@@ -40,8 +47,8 @@ USER nextjs
 EXPOSE 3000
 
 # 设置环境变量
-ENV PORT 3000
-ENV NODE_ENV production
+ENV PORT=3000
+ENV NODE_ENV=production
 
 # 启动应用
 CMD ["node", "server.js"]

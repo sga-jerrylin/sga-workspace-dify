@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -14,9 +15,6 @@ const nextConfig = {
   swcMinify: true,
   poweredByHeader: false,
   reactStrictMode: true,
-  // 跳过静态生成，避免构建时环境变量问题
-  trailingSlash: false,
-  generateBuildId: () => 'build-' + Date.now(),
 }
 
 export default nextConfig

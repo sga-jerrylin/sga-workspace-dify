@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,8 @@ interface LoginFormData {
   rememberMe: boolean
 }
 
-export default function LoginPage() {
+// 内部组件，使用 useSearchParams
+function LoginForm() {
   const [formData, setFormData] = useState<LoginFormData>({
     identifier: "admin", // 预填充管理员账号
     password: "",
@@ -277,5 +278,14 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// 主要导出组件，用 Suspense 包装
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">加载中...</div>}>
+      <LoginForm />
+    </Suspense>
   )
 }

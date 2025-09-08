@@ -480,7 +480,7 @@ export default function EnhancedChatWithSidebar({
   const [sessions, setSessions] = useState<ChatSession[]>([{
     id: 'default',
     title: '新对话',
-    messages: initialMessages || [{
+    messages: [{
       id: '1',
       role: 'assistant' as const,
       content: `你好！我是${agentName}。`,
@@ -843,7 +843,30 @@ export default function EnhancedChatWithSidebar({
         id: nanoid(),
         title: historyConv.name || '历史对话',
         messages: convertedMessages,
-        lastUpdate: new Date(Number(historyConv.created_at) * 1000), // 转换为毫秒
+        lastUpdate: (() => {
+          try {
+            if (!historyConv.created_at) return new Date()
+
+            let timestamp = Number(historyConv.created_at)
+
+            // 如果是秒级时间戳，转换为毫秒
+            if (timestamp < 10000000000) {
+              timestamp = timestamp * 1000
+            }
+
+            const date = new Date(timestamp)
+
+            // 检查日期是否有效
+            if (isNaN(date.getTime()) || date.getFullYear() < 2020) {
+              return new Date()
+            }
+
+            return date
+          } catch (error) {
+            console.warn('历史会话时间解析失败:', historyConv.created_at, error)
+            return new Date()
+          }
+        })(),
         difyConversationId: historyConv.id,
         isHistory: true,
         agentName: agentName,
@@ -1888,14 +1911,35 @@ export default function EnhancedChatWithSidebar({
                                 {historyConv.name || '未命名对话'}
                               </h4>
                               <p className="text-xs text-slate-400 mt-1">
-                                {historyConv.created_at
-                                  ? new Date(Number(historyConv.created_at) * 1000).toLocaleDateString('zh-CN', {
+                                {(() => {
+                                  if (!historyConv.created_at) return '未知时间'
+
+                                  try {
+                                    // 尝试不同的时间戳格式
+                                    let timestamp = Number(historyConv.created_at)
+
+                                    // 如果是秒级时间戳，转换为毫秒
+                                    if (timestamp < 10000000000) {
+                                      timestamp = timestamp * 1000
+                                    }
+
+                                    const date = new Date(timestamp)
+
+                                    // 检查日期是否有效
+                                    if (isNaN(date.getTime()) || date.getFullYear() < 2020) {
+                                      return '未知时间'
+                                    }
+
+                                    return date.toLocaleDateString('zh-CN', {
                                       year: 'numeric',
                                       month: '2-digit',
                                       day: '2-digit'
                                     })
-                                  : '未知时间'
-                                }
+                                  } catch (error) {
+                                    console.warn('时间解析失败:', historyConv.created_at, error)
+                                    return '未知时间'
+                                  }
+                                })()}
                               </p>
                             </>
                           )}
@@ -2139,7 +2183,7 @@ export default function EnhancedChatWithSidebar({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={`向${agentName}发送消息...`}
-                className="min-h-[36px] max-h-24 resize-none bg-transparent border-none text-white placeholder:text-blue-200/50 focus:outline-none focus:ring-0 px-2 text-sm"
+                className="min-h-[36px] max-h-24 resize-none bg-transparent border-none text-white placeholder:text-blue-200/50 focus:outline-none focus:ring-0 px-2 text-base"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
