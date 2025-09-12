@@ -1,10 +1,15 @@
-# 生产环境Docker - 优化版本
-# 如果Docker Hub连接有问题，可以尝试使用国内镜像
-# FROM registry.cn-hangzhou.aliyuncs.com/google_containers/node:20-alpine
-FROM node:20-alpine
+# 中国大陆网络优化版本 - 使用国内镜像源
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:20-alpine
 
-# 设置npm镜像源以解决网络问题
-RUN npm config set registry https://registry.npmmirror.com
+# 设置阿里云npm镜像源
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm config set disturl https://npmmirror.com/dist && \
+    npm config set electron_mirror https://npmmirror.com/mirrors/electron/ && \
+    npm config set sass_binary_site https://npmmirror.com/mirrors/node-sass/ && \
+    npm config set phantomjs_cdnurl https://npmmirror.com/mirrors/phantomjs/
+
+# 使用阿里云apk镜像源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 # 安装必要的系统依赖
 RUN apk add --no-cache libc6-compat curl wget
@@ -16,7 +21,7 @@ COPY package*.json ./
 
 # 安装所有依赖（包括开发依赖）
 # 使用更长的超时时间和重试机制
-RUN npm ci --legacy-peer-deps --timeout=300000 --retry=3
+RUN npm ci --legacy-peer-deps --timeout=600000 --retry=5 --verbose
 
 # 复制源代码
 COPY . .

@@ -1,0 +1,195 @@
+# 🐳 企业AI工作空间 - 中国网络优化版本
+# 使用国内镜像源，解决网络连接问题
+
+services:
+  # ===========================================
+  # 核心应用层
+  # ===========================================
+  
+  # API网关 + 静态文件服务
+  nginx:
+    image: registry.cn-hangzhou.aliyuncs.com/library/nginx:alpine
+    ports:
+      - "8100:80"    # 主入口 (避开80/8080)
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./public/uploads:/var/www/uploads:ro
+    depends_on:
+      - app
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js主应用
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile.china
+    # ports: 不暴露到主机，只在内部网络访问
+    environment:
+      # 应用配置
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      - NEXT_PUBLIC_APP_URL=http://localhost:8100
+      
+      # 安全密钥
+      - JWT_SECRET=${JWT_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      
+      # 数据库连接
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      
+      # 服务连接
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+      
+      # 业务配置
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD}
+      - DEFAULT_DIFY_BASE_URL=${DEFAULT_DIFY_BASE_URL}
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./public/uploads:/app/public/uploads
+      - ./logs:/app/logs
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+
+  # ===========================================
+  # 数据存储层
+  # ===========================================
+  
+  # PostgreSQL主数据库
+  postgres:
+    image: registry.cn-hangzhou.aliyuncs.com/library/postgres:15-alpine
+    ports:
+      - "5433:5432"  # 避开默认5432端口
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/lightweight-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Redis缓存 + 会话存储
+  redis:
+    image: registry.cn-hangzhou.aliyuncs.com/library/redis:7-alpine
+    ports:
+      - "6380:6379"  # 避开默认6379端口
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # ===========================================
+  # 文件存储层 (可选)
+  # ===========================================
+  
+  # MinIO对象存储
+  minio:
+    image: registry.cn-hangzhou.aliyuncs.com/library/minio:latest
+    ports:
+      - "9100:9000"  # API端口 (避开9000)
+      - "9101:9001"  # 控制台端口
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - app-network
+    restart: unless-stopped
+    profiles: ["storage"]
+
+# ===========================================
+# 数据卷定义
+# ===========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+# ===========================================
+# 网络定义
+# ===========================================
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+# ===========================================
+# 中国网络优化说明
+# ===========================================
+# 
+# 本文件专为中国大陆网络环境优化:
+# 1. 使用阿里云容器镜像服务
+# 2. 使用npm国内镜像源
+# 3. 使用apk国内镜像源
+# 4. 增加超时时间和重试次数
+#
+# 使用方法:
+#   docker compose -f docker-compose.china.yml up -d
+#
