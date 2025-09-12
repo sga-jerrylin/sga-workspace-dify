@@ -54,7 +54,24 @@
 - Docker and Docker Compose
 - Git
 
-### Installation
+### 🐳 One-Click Deployment (Recommended)
+
+#### Linux/macOS:
+```bash
+git clone https://github.com/sologenai/sga-workspace.git
+cd sga-workspace
+chmod +x quick-deploy.sh
+./quick-deploy.sh
+```
+
+#### Windows:
+```bash
+git clone https://github.com/sologenai/sga-workspace.git
+cd sga-workspace
+quick-deploy.bat
+```
+
+### 📋 Manual Installation
 
 1. **Clone the repository**
 ```bash
@@ -64,19 +81,22 @@ cd sga-workspace
 
 2. **Configure environment**
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
+cp .env.production .env
+# Edit .env with your configuration if needed
 ```
 
 3. **Start with Docker**
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 4. **Access the application**
 - Main Application: http://localhost:8100
-- Admin Panel: http://localhost:8100/admin
-- Default Login: admin / admin123
+- Default Login: admin@example.com / Admin123456
+
+### 🔧 Troubleshooting
+
+If you encounter network issues, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for detailed solutions.
 
 ### Development Setup
 

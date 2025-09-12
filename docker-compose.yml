@@ -1,8 +1,6 @@
 # 🐳 企业AI工作空间 - 轻量级Docker编排
 # 简单、直接、够用的5服务架构
 
-version: '3.8'
-
 services:
   # ===========================================
   # 核心应用层
@@ -74,8 +72,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 15s
+      retries: 5
+      start_period: 60s
 
   # ===========================================
   # 数据存储层
