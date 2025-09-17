@@ -1,6 +1,6 @@
 # SGA Workspace - Dify 集成增强版
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/sga-jerrylin/sga-workspace-dify/releases)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/sga-jerrylin/sga-workspace-dify/releases)
 [![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Dify](https://img.shields.io/badge/Dify-integrated-orange.svg)](https://dify.ai)

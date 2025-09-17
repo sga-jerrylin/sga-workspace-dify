@@ -173,7 +173,7 @@ NEXT_PUBLIC_APP_URL="https://your-domain.com"
 
 ## 🎉 更新日志
 
-### v1.3.0 - Dify 集成增强版
+### v1.0.0 - Dify 集成版
 - ✅ 完整修复图片显示问题
 - ✅ 优化消息渲染逻辑
 - ✅ 改进代理 API 性能

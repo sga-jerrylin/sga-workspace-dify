@@ -117,7 +117,7 @@
 ## ✅ 发布准备
 
 ### 版本信息
-- [x] **版本号** - v1.3.0 Dify 集成增强版
+- [x] **版本号** - v1.0.0 Dify 集成版
 - [x] **更新日志** - 详细的功能更新说明
 - [x] **兼容性** - 向后兼容性说明
 - [x] **迁移指南** - 从旧版本升级指导
@@ -149,14 +149,14 @@
 ```bash
 # 最终提交
 git add .
-git commit -m "🎉 v1.3.0 正式发布 - Dify 集成增强版"
+git commit -m "🎉 v1.0.0 正式发布 - Dify 集成版"
 
 # 推送到新仓库
 git push dify-repo main
 
 # 创建发布标签
-git tag -a v1.3.0 -m "v1.3.0 - Dify 集成增强版正式发布"
-git push dify-repo v1.3.0
+git tag -a v1.0.0 -m "v1.0.0 - Dify 集成版正式发布"
+git push dify-repo v1.0.0
 ```
 
 **✅ 所有检查项完成后，即可正式发布！** 🚀
