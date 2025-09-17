@@ -10,13 +10,34 @@
 
 ## 🎯 推送到新仓库
 
-### 方法1：直接推送（推荐）
-```bash
-# 确保网络连接正常
-ping github.com
+### ⚠️ 当前状态：远程仓库冲突
+远程仓库已有内容，需要先处理冲突。错误信息：
+```
+! [rejected] main -> main (fetch first)
+hint: Updates were rejected because the remote contains work that you do not have locally.
+```
 
-# 推送到新仓库
+### 方法1：解决冲突后推送（推荐）
+```bash
+# 1. 先拉取远程更改（需要网络正常）
+git pull dify-repo main --allow-unrelated-histories
+
+# 2. 如果有冲突，解决冲突后提交
+git add .
+git commit -m "解决合并冲突"
+
+# 3. 推送到新仓库
 git push dify-repo main
+
+# 4. 创建版本标签
+git tag -a v1.3.0 -m "v1.3.0 - Dify 集成增强版正式发布"
+git push dify-repo v1.3.0
+```
+
+### 方法1.1：强制推送（如果确定要覆盖远程）
+```bash
+# ⚠️ 警告：这会覆盖远程仓库的所有内容
+git push dify-repo main --force
 
 # 创建版本标签
 git tag -a v1.3.0 -m "v1.3.0 - Dify 集成增强版正式发布"
@@ -101,10 +122,39 @@ verify-deployment.bat   # Windows
 ## 📞 如遇问题
 
 ### 网络问题
-- 检查防火墙设置
-- 尝试使用 VPN 或代理
-- 使用 GitHub Desktop 客户端
-- 联系网络管理员
+当前遇到的网络连接问题：
+```
+fatal: unable to access 'https://github.com/sga-jerrylin/sga-workspace-dify.git/':
+Failed to connect to github.com port 443 after 21103 ms: Could not connect to server
+```
+
+**解决方案：**
+1. **检查网络连接**：
+   ```bash
+   ping github.com
+   curl -I https://github.com
+   ```
+
+2. **使用代理或 VPN**：
+   ```bash
+   # 设置 Git 代理（如果有代理）
+   git config --global http.proxy http://proxy.company.com:8080
+   git config --global https.proxy https://proxy.company.com:8080
+   ```
+
+3. **使用 SSH 替代 HTTPS**：
+   ```bash
+   # 更改远程 URL 为 SSH
+   git remote set-url dify-repo git@github.com:sga-jerrylin/sga-workspace-dify.git
+   ```
+
+4. **使用 GitHub Desktop 或 GitHub CLI**：
+   - 下载 GitHub Desktop 客户端
+   - 或使用 `gh` 命令行工具
+
+5. **等待网络恢复后重试**：
+   - 保存当前工作（已完成）
+   - 网络正常后执行推送命令
 
 ### 权限问题
 - 确认 GitHub 账户权限
