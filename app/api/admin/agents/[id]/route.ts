@@ -37,7 +37,7 @@ const platformConfigSchemas = {
   DIFY: z.object({
     baseUrl: z.string().min(1, "Dify URL不能为空"),
     apiKey: z.string().min(1, "API Key不能为空"),
-    timeout: z.number().optional().default(30000),
+    timeout: z.number().optional().default(300000),
   }),
   RAGFLOW: z.object({
     baseUrl: z.string().min(1, "RAGFlow URL不能为空"),

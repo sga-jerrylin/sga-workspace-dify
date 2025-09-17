@@ -122,6 +122,20 @@ export default function WorkspacePage() {
 
           // 设置Agent和部门数据
           const agentList = data.data.agents || []
+
+          // 调试：检查每个agent的chineseName类型
+          console.log('=== Agent数据类型检查 ===')
+          agentList.forEach((agent, index) => {
+            console.log(`Agent ${index}:`, {
+              id: agent.id,
+              chineseName: agent.chineseName,
+              chineseNameType: typeof agent.chineseName,
+              chineseNameConstructor: agent.chineseName?.constructor?.name,
+              isString: typeof agent.chineseName === 'string',
+              stringValue: String(agent.chineseName)
+            })
+          })
+
           setAgents(agentList)
 
           // 检查是否有可用的Agent，如果没有且用户是管理员，跳转到管理后台

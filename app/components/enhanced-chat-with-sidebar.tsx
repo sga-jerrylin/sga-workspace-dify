@@ -31,6 +31,7 @@ import { toast } from 'sonner'
 import SimpleContentRenderer from './simple-content-renderer'
 import FileCard from './file-card'
 import { EnhancedDifyClient, DifyStreamMessage } from '@/lib/enhanced-dify-client'
+import { toText } from '@/app/utils/text'
 
 // 打字效果组件
 interface TypewriterEffectProps {
@@ -43,19 +44,22 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
   const [currentIndex, setCurrentIndex] = useState(0)
   const contentRef = useRef('')
 
+  // 确保content是字符串
+  const safeContent = toText(content, '')
+
   useEffect(() => {
     // 如果内容变化了（流式更新）
-    if (content !== contentRef.current) {
+    if (safeContent !== contentRef.current) {
       console.log('[TypewriterEffect] 内容更新:', {
         oldContent: contentRef.current.substring(0, 50) + (contentRef.current.length > 50 ? '...' : ''),
-        newContent: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
-        contentType: typeof content,
-        contentLength: content.length
+        newContent: safeContent.substring(0, 50) + (safeContent.length > 50 ? '...' : ''),
+        contentType: typeof safeContent,
+        contentLength: safeContent.length
       })
 
-      contentRef.current = content
+      contentRef.current = safeContent
       // 重置显示状态，从新内容的当前显示长度开始
-      if (content.startsWith(displayedContent)) {
+      if (safeContent.startsWith(displayedContent)) {
         // 新内容包含当前显示的内容，继续从当前位置打字
         setCurrentIndex(displayedContent.length)
       } else {
@@ -64,20 +68,34 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
         setCurrentIndex(0)
       }
     }
-  }, [content, displayedContent.length, currentIndex])
+  }, [safeContent, displayedContent.length, currentIndex])
 
   useEffect(() => {
-    if (currentIndex < content.length) {
+    if (currentIndex < contentRef.current.length) {
       const timer = setTimeout(() => {
-        setDisplayedContent(content.slice(0, currentIndex + 1))
+        setDisplayedContent(contentRef.current.substring(0, currentIndex + 1))
         setCurrentIndex(prev => prev + 1)
       }, speed)
       return () => clearTimeout(timer)
     }
-  }, [currentIndex, content, speed])
+  }, [currentIndex, speed])
 
   return (
-    <SimpleContentRenderer content={displayedContent} />
+    <div
+      className="message-content"
+      style={{
+        maxWidth: '100%',
+        wordWrap: 'break-word',
+        overflowWrap: 'break-word'
+      }}
+      dangerouslySetInnerHTML={{
+        __html: displayedContent ? marked.parse(displayedContent, {
+          breaks: true,
+          gfm: true,
+          async: false
+        }) as string : ''
+      }}
+    />
   )
 }
 
@@ -166,11 +184,19 @@ const extractFileLinks = (content: string) => {
 // 增强的消息内容组件，支持代码块复制
 interface EnhancedMessageContentProps {
   content: string
+  agentConfig?: AgentConfig
+  attachments?: FileAttachment[]
 }
 
-const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content }) => {
+const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content, agentConfig, attachments = [] }) => {
   const [copiedStates, setCopiedStates] = useState<{[key: string]: boolean}>({})
   const contentRef = useRef<HTMLDivElement>(null)
+
+  // 确保content是字符串
+  const safeContent = toText(content, '')
+
+  console.log('[EnhancedMessageContent] 输入content:', content, typeof content)
+  console.log('[EnhancedMessageContent] safeContent:', safeContent, typeof safeContent)
 
   // 复制代码到剪贴板
   const copyToClipboard = async (text: string, id: string) => {
@@ -221,22 +247,120 @@ const EnhancedMessageContent: React.FC<EnhancedMessageContentProps> = ({ content
     ;(window as any).copyCode = copyToClipboard
   }, [])
 
-  const htmlContent = content ? marked.parse(content, { async: false }) as string : ''
-  const processedContent = processCodeBlocks(htmlContent)
+  console.log('[EnhancedMessageContent] 使用自定义渲染器处理Dify图片URL')
+
+  // 自定义渲染器，处理Dify的相对路径图片URL
+  const renderer = new marked.Renderer()
+
+  // 重写图片渲染逻辑
+  renderer.image = ({ href, title, text }: { href: string; title: string | null; text: string }) => {
+    // 检查这个图片URL是否已经作为附件存在，如果是则不在Markdown中显示
+    const existsAsAttachment = attachments.some(att => {
+      if (!att.url) return false
+
+      // 提取URL的基础部分（去掉查询参数）
+      const hrefBase = href.split('?')[0]
+      const attUrlBase = att.url.split('?')[0]
+
+      return (
+        att.url === href ||
+        attUrlBase === hrefBase ||
+        (href.includes('/files/tools/') && att.url.includes(hrefBase)) ||
+        (att.url.includes('/files/tools/') && hrefBase.includes('/files/tools/') &&
+         hrefBase.split('/').pop() === attUrlBase.split('/').pop()) // 比较文件名
+      )
+    })
+
+    if (existsAsAttachment) {
+      console.log('[EnhancedMessageContent] 图片已作为附件存在，跳过Markdown渲染:', href)
+      return '' // 不渲染，避免双重显示
+    }
+
+    let imageSrc = href
+
+    // 如果是Dify的相对路径图片，转换为代理URL
+    if (href.startsWith('/files/tools/') || href.startsWith('/files/')) {
+      // 使用传入的agentConfig，去掉/v1后缀得到基础URL
+      if (agentConfig?.difyUrl) {
+        const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+        const fullImageUrl = `${difyBaseUrl}${href}`
+        // 使用代理访问图片，避免认证问题，并传递API Key
+        imageSrc = `/api/proxy-image?url=${encodeURIComponent(fullImageUrl)}&apiKey=${encodeURIComponent(agentConfig.difyKey || '')}`
+
+        console.log('[EnhancedMessageContent] 转换Dify图片URL:', {
+          original: href,
+          fullImageUrl: fullImageUrl,
+          proxyImageUrl: imageSrc,
+          agentDifyUrl: agentConfig.difyUrl,
+          difyBaseUrl: difyBaseUrl
+        })
+      }
+    }
+
+    return `<img src="${imageSrc}" alt="${text}" title="${title || ''}" style="max-width: 400px; max-height: 300px; border-radius: 8px; cursor: pointer;" onclick="window.open('${imageSrc}', '_blank')" />`
+  }
+
+  // 重写链接渲染逻辑，处理Dify的图片下载链接
+  renderer.link = ({ href, title, tokens }: any) => {
+    const text = tokens[0]?.raw || href
+    let linkHref = href
+
+    // 如果是Dify的图片文件链接，检查是否已作为附件存在
+    if (href.startsWith('/files/tools/') && (href.endsWith('.png') || href.endsWith('.jpg') || href.endsWith('.jpeg') || href.endsWith('.gif') || href.endsWith('.webp'))) {
+      // 检查这个图片链接是否已经作为附件存在
+      const existsAsAttachment = attachments.some(att => {
+        if (!att.url) return false
+        const hrefBase = href.split('?')[0]
+        const attUrlBase = att.url.split('?')[0]
+        return attUrlBase === hrefBase ||
+               (hrefBase.includes('/files/tools/') && attUrlBase.includes('/files/tools/') &&
+                hrefBase.split('/').pop() === attUrlBase.split('/').pop())
+      })
+
+      if (existsAsAttachment) {
+        console.log('[EnhancedMessageContent] 图片链接已作为附件存在，跳过渲染:', href)
+        return '' // 不渲染，避免重复显示
+      }
+    }
+
+    // 普通链接处理
+    return `<a href="${linkHref}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">${text}</a>`
+  }
 
   return (
-    <div
-      ref={contentRef}
-      className="message-content"
-      style={{
-        maxWidth: '100%',
-        wordWrap: 'break-word',
-        overflowWrap: 'break-word'
-      }}
-      dangerouslySetInnerHTML={{
-        __html: processedContent
-      }}
-    />
+    <div>
+      <div
+        ref={contentRef}
+        className="message-content"
+        style={{
+          maxWidth: '100%',
+          wordWrap: 'break-word',
+          overflowWrap: 'break-word'
+        }}
+        dangerouslySetInnerHTML={{
+          __html: safeContent ? marked.parse(safeContent, {
+            breaks: true,
+            gfm: true,
+            async: false,
+            renderer: renderer
+          }) as string : ''
+        }}
+      />
+
+      {/* 渲染附件 */}
+      {attachments && attachments.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {attachments.map((attachment) => (
+            <AttachmentRenderer
+              key={attachment.id}
+              attachment={attachment}
+              isStreamingComplete={true}
+              agentConfig={agentConfig}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -256,13 +380,16 @@ interface FileAttachment {
 interface AttachmentRendererProps {
   attachment: FileAttachment
   isStreamingComplete?: boolean
+  agentConfig?: any
 }
 
-const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({ 
-  attachment, 
-  isStreamingComplete = true 
+const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
+  attachment,
+  isStreamingComplete = true,
+  agentConfig
 }) => {
-  const isImage = attachment.type.startsWith('image/')
+  // 支持两种格式：MIME类型 (image/png) 和 Dify 类型 (image)
+  const isImage = attachment.type.startsWith('image/') || attachment.type === 'image'
   const isDocument = [
     'application/pdf',
     'application/msword',
@@ -353,14 +480,76 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
       // Agent 生成的图片：显示图片 + 流式完成后显示 FileCard
       let imageSrc: string | undefined = undefined;
 
+      console.log('[AttachmentRenderer] 处理Agent图片:', {
+        attachmentName: attachment.name,
+        attachmentUrl: attachment.url,
+        attachmentUrlType: typeof attachment.url,
+        attachmentUrlLength: attachment.url?.length,
+        hasBase64: !!attachment.base64Data,
+        hasQueryParams: attachment.url?.includes('?'),
+        queryParams: attachment.url?.split('?')[1],
+        agentConfigExists: !!agentConfig,
+        difyKey: agentConfig?.difyKey ? `${agentConfig.difyKey.substring(0, 8)}...` : 'none'
+      })
+
       if (attachment.base64Data) {
         imageSrc = attachment.base64Data;
       } else if (attachment.url) {
-        // 对于DIFY的图片URL，使用代理
-        if (attachment.url.startsWith('/files/') || attachment.url.includes('files/tools/')) {
-          imageSrc = `/api/proxy-image?url=${encodeURIComponent(attachment.url)}`;
+        // 检查是否需要代理（内网地址或特定域名）
+        if (attachment.url.includes('192.144.232.60') ||
+            attachment.url.includes('43.139.167.250') ||
+            attachment.url.includes('localhost') ||
+            attachment.url.includes('127.0.0.1') ||
+            attachment.url.includes('10.') ||
+            attachment.url.includes('172.') ||
+            attachment.url.includes('192.168.') ||
+            attachment.url.includes('/files/tools/')) {
+
+          // 如果是相对路径，转换为完整URL
+          let fullUrl = attachment.url
+          if (attachment.url.startsWith('/files/tools/') && agentConfig?.difyUrl) {
+            const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+            fullUrl = `${difyBaseUrl}${attachment.url}`
+            console.log('[AttachmentRenderer] 转换相对路径为完整URL:', {
+              original: attachment.url,
+              fullUrl: fullUrl
+            })
+          }
+
+          // 对于带签名的Dify URL，需要传递API Key
+          const apiKeyParam = agentConfig?.difyKey ? `&apiKey=${encodeURIComponent(agentConfig.difyKey)}` : ''
+          imageSrc = `/api/proxy-image?url=${encodeURIComponent(fullUrl)}${apiKeyParam}`;
+          console.log('[AttachmentRenderer] 使用代理访问Dify图片:', {
+            originalUrl: attachment.url,
+            fullUrl: fullUrl,
+            encodedUrl: encodeURIComponent(fullUrl),
+            proxyUrl: imageSrc,
+            hasApiKey: !!agentConfig?.difyKey,
+            fullUrlLength: fullUrl?.length,
+            fullUrlHasQuery: fullUrl?.includes('?')
+          })
         } else {
-          imageSrc = attachment.url;
+          // 对于相对路径的Dify图片，也需要代理访问
+          if (attachment.url && attachment.url.startsWith('/files/')) {
+            // 转换为完整URL
+            let fullUrl = attachment.url
+            if (agentConfig?.difyUrl) {
+              const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+              fullUrl = `${difyBaseUrl}${attachment.url}`
+            }
+
+            // 使用代理访问
+            const apiKeyParam = agentConfig?.difyKey ? `&apiKey=${encodeURIComponent(agentConfig.difyKey)}` : ''
+            imageSrc = `/api/proxy-image?url=${encodeURIComponent(fullUrl)}${apiKeyParam}`;
+            console.log('[AttachmentRenderer] 相对路径Dify图片使用代理:', {
+              originalUrl: attachment.url,
+              fullUrl: fullUrl,
+              proxyUrl: imageSrc
+            })
+          } else {
+            imageSrc = attachment.url;
+            console.log('[AttachmentRenderer] 直接访问外网图片:', imageSrc)
+          }
         }
       }
 
@@ -376,14 +565,12 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
               onError={(e) => {
                 console.error(`[AttachmentRenderer] Agent图片加载失败: ${attachment.name}`, {
                   originalUrl: attachment.url,
-                  currentSrc: imageSrc,
+                  proxiedUrl: imageSrc,
                   error: e
                 });
-                // 如果直接访问失败，尝试使用代理
-                if (!imageSrc?.includes('/api/proxy-image') && attachment.url) {
-                  console.log('[AttachmentRenderer] 尝试使用代理访问图片')
-                  const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(attachment.url)}`;
-                  (e.target as HTMLImageElement).src = proxyUrl;
+                // 如果代理失败，尝试直接访问原始URL
+                if (imageSrc?.includes('/api/proxy-image') && attachment.url) {
+                  (e.target as HTMLImageElement).src = attachment.url;
                 }
               }}
               onClick={() => {
@@ -402,6 +589,10 @@ const AttachmentRenderer: React.FC<AttachmentRendererProps> = ({
             />
             <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
               {attachment.name} • {(attachment.size / 1024).toFixed(1)}KB
+              <br />
+              <span className="text-xs text-gray-300">原始: {attachment.url?.substring(0, 50)}...</span>
+              <br />
+              <span className="text-xs text-gray-300">代理: {imageSrc?.substring(0, 50)}...</span>
             </div>
           </div>
           {isStreamingComplete && <FileCard attachment={attachment} />}
@@ -487,6 +678,8 @@ export default function EnhancedChatWithSidebar({
   sessionTitle,
   agentConfig
 }: EnhancedChatWithSidebarProps) {
+  // 确保 agentName 始终是字符串 - 使用toText终极保护
+  const safeAgentName = toText(agentName, 'AI助手')
   // 基础状态
   const [sessions, setSessions] = useState<ChatSession[]>([{
     id: 'default',
@@ -494,7 +687,7 @@ export default function EnhancedChatWithSidebar({
     messages: [{
       id: '1',
       role: 'assistant' as const,
-      content: `你好！我是${agentName}。`,
+      content: `你好！我是${String(safeAgentName)}。`,
       timestamp: Date.now()
     }],
     lastUpdate: new Date()
@@ -699,7 +892,7 @@ export default function EnhancedChatWithSidebar({
       const timeoutController = new AbortController()
       const timeoutId = setTimeout(() => {
         timeoutController.abort()
-      }, 10000) // 10秒超时
+      }, 300000) // 300秒超时
 
       try {
         // 调用 Dify API 获取历史对话
@@ -794,7 +987,7 @@ export default function EnhancedChatWithSidebar({
       messages: [{
         id: nanoid(),
         role: 'assistant',
-        content: `你好！我是${agentName}。`,
+        content: `你好！我是${String(safeAgentName)}。`,
         timestamp: Date.now()
       }],
       lastUpdate: new Date(),
@@ -847,7 +1040,7 @@ export default function EnhancedChatWithSidebar({
         const timeoutController = new AbortController()
         const timeoutId = setTimeout(() => {
           timeoutController.abort()
-        }, 15000) // 15秒超时（历史消息可能较多）
+        }, 300000) // 300秒超时（历史消息可能较多）
 
         try {
           // 获取历史消息 - 使用正确的DIFY API路径
@@ -870,37 +1063,142 @@ export default function EnhancedChatWithSidebar({
           convertedMessages = []
           // 不需要reverse，保持原始顺序（最新消息在底部）
           messages.forEach((msg: any) => {
-            const timestamp = msg.created_at ? (msg.created_at * 1000) : Date.now()
+            // 处理用户消息的附件
+            const userAttachments: FileAttachment[] = []
+            if (msg.message_files && Array.isArray(msg.message_files)) {
+              msg.message_files.forEach((file: any) => {
+                if (file.type === 'image' && file.url && file.belongs_to === 'user') {
+                  // 处理文件URL - 如果是相对路径，转换为完整URL（与实时消息处理保持一致）
+                  let fullFileUrl = file.url
+                  if (fullFileUrl && !fullFileUrl.startsWith('http') && agentConfig?.difyUrl) {
+                    const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+                    fullFileUrl = `${difyBaseUrl}${fullFileUrl}`
+                    console.log('[EnhancedChat] 转换历史用户图片URL:', {
+                      original: file.url,
+                      converted: fullFileUrl,
+                      agentDifyUrl: agentConfig.difyUrl,
+                      difyBaseUrl: difyBaseUrl
+                    })
+                  }
 
-            // 用户消息
-            if (msg.query) {
-              convertedMessages.push({
-                id: `${msg.id}_user` || nanoid(),
-                role: 'user' as const,
-                content: msg.query,
-                timestamp: timestamp,
-                attachments: []
+                  console.log('[EnhancedChat] 处理历史消息用户图片文件:', {
+                    id: file.id,
+                    type: file.type,
+                    originalUrl: file.url,
+                    fullUrl: fullFileUrl,
+                    belongs_to: file.belongs_to
+                  })
+
+                  userAttachments.push({
+                    id: file.id || nanoid(),
+                    name: `image_${file.id || nanoid()}.png`,
+                    type: 'image/png',
+                    size: 0,
+                    url: fullFileUrl, // 使用转换后的完整URL
+                    source: 'user' as const
+                  })
+                }
               })
             }
 
-            // 助手消息
-            if (msg.answer) {
+            // 只添加有内容的用户消息
+            if (msg.query && msg.query.trim()) {
               convertedMessages.push({
-                id: `${msg.id}_assistant` || nanoid(),
-                role: 'assistant' as const,
-                content: msg.answer,
-                timestamp: timestamp + 1, // 稍微延后，确保顺序正确
-                attachments: msg.message_files?.map((file: any) => ({
-                  id: file.id || nanoid(),
-                  name: file.name || 'file',
-                  type: file.type === 'image' ? 'image/png' : (file.type || 'application/octet-stream'),
-                  size: file.size || 0,
-                  url: file.url,
-                  source: 'agent' as const
-                })) || []
+                id: nanoid(),
+                role: 'user',
+                content: msg.query.trim(),
+                timestamp: new Date(msg.created_at).getTime(),
+                attachments: userAttachments.length > 0 ? userAttachments : undefined
+              })
+            }
+
+            // 只添加有内容的AI回复
+            if (msg.answer && msg.answer.trim()) {
+              console.log('[EnhancedChat] 历史消息详细内容:', {
+                answer: msg.answer,
+                messageFiles: msg.message_files,
+                fullMessage: msg
+              })
+
+              // 处理历史消息中的AI附件（message_files）
+              const attachments: FileAttachment[] = []
+              if (msg.message_files && Array.isArray(msg.message_files)) {
+                console.log('[EnhancedChat] 原始message_files:', msg.message_files)
+
+                msg.message_files.forEach((file: any) => {
+                  console.log('[EnhancedChat] 处理单个文件:', {
+                    id: file.id,
+                    type: file.type,
+                    url: file.url,
+                    belongs_to: file.belongs_to,
+                    urlLength: file.url?.length,
+                    urlStartsWith: file.url?.substring(0, 50)
+                  })
+
+                  if (file.type === 'image' && file.url && file.belongs_to === 'assistant') {
+                    // 处理文件URL - 如果是相对路径，转换为完整URL（与实时消息处理保持一致）
+                    let fullFileUrl = file.url
+                    if (fullFileUrl && !fullFileUrl.startsWith('http') && agentConfig?.difyUrl) {
+                      const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+                      fullFileUrl = `${difyBaseUrl}${fullFileUrl}`
+                      console.log('[EnhancedChat] 转换历史AI图片URL:', {
+                        original: file.url,
+                        converted: fullFileUrl,
+                        agentDifyUrl: agentConfig.difyUrl,
+                        difyBaseUrl: difyBaseUrl,
+                        originalLength: file.url.length,
+                        convertedLength: fullFileUrl.length
+                      })
+                    } else {
+                      console.log('[EnhancedChat] 历史AI图片URL无需转换:', {
+                        url: fullFileUrl,
+                        startsWithHttp: fullFileUrl?.startsWith('http'),
+                        hasAgentConfig: !!agentConfig?.difyUrl
+                      })
+                    }
+
+                    console.log('[EnhancedChat] 处理历史消息AI图片文件:', {
+                      id: file.id,
+                      type: file.type,
+                      originalUrl: file.url,
+                      fullUrl: fullFileUrl,
+                      belongs_to: file.belongs_to
+                    })
+
+                    const finalAttachment = {
+                      id: file.id || nanoid(),
+                      name: `image_${file.id || nanoid()}.png`,
+                      type: 'image/png',
+                      size: 0,
+                      url: fullFileUrl, // 使用转换后的完整URL
+                      source: 'agent' as const
+                    }
+
+                    console.log('[EnhancedChat] 创建的附件对象:', {
+                      id: finalAttachment.id,
+                      url: finalAttachment.url,
+                      urlLength: finalAttachment.url?.length,
+                      hasQueryParams: finalAttachment.url?.includes('?'),
+                      queryParams: finalAttachment.url?.split('?')[1]
+                    })
+
+                    attachments.push(finalAttachment)
+                  }
+                })
+              }
+
+              convertedMessages.push({
+                id: nanoid(),
+                role: 'assistant',
+                content: msg.answer.trim(),
+                timestamp: new Date(msg.created_at).getTime(),
+                attachments: attachments.length > 0 ? attachments : undefined
               })
             }
           })
+
+          // 按时间排序（确保消息顺序正确）
+          convertedMessages.sort((a, b) => a.timestamp - b.timestamp)
 
           // 更新消息缓存
           messageCacheRef.current[historyConv.id] = {
@@ -948,7 +1246,7 @@ export default function EnhancedChatWithSidebar({
         })(),
         difyConversationId: historyConv.id,
         isHistory: true,
-        agentName: agentName,
+        agentName: safeAgentName,
         agentAvatar: actualAgentAvatar
       }
 
@@ -971,7 +1269,7 @@ export default function EnhancedChatWithSidebar({
     } finally {
       setIsLoadingHistory(false)
     }
-  }, [sessions, agentConfig, agentName, actualAgentAvatar])
+  }, [sessions, agentConfig, safeAgentName, actualAgentAvatar])
 
   // 初始化时获取历史对话
   useEffect(() => {
@@ -1274,7 +1572,7 @@ export default function EnhancedChatWithSidebar({
               // 检测下载链接并生成文件附件
               const detectedAttachments = detectDownloadLinks(fullContent)
 
-              // 实时更新消息内容和附件
+              // 实时更新消息内容和附件 - 恢复参考文件的逻辑
               setSessions(prev => prev.map(session =>
                 session.id === currentSessionId
                   ? {
@@ -1321,22 +1619,22 @@ export default function EnhancedChatWithSidebar({
 
             case 'file':
               // 处理文件消息
-              console.log('[EnhancedChat] 收到文件:', message.content, 'fileType:', message.fileType)
+              console.log('[EnhancedChat] 收到文件:', message.content)
 
-              // 从URL中提取文件名
-              const fileUrl = message.content
-              const fileName = fileUrl.split('/').pop()?.split('?')[0] || `文件_${Date.now()}`
-
-              // 根据fileType确定MIME类型
-              let mimeType = 'application/octet-stream'
-              if (message.fileType === 'image') {
-                mimeType = 'image/png'
-              } else if (message.fileType === 'document') {
-                mimeType = 'application/pdf'
-              } else if (message.fileType === 'audio') {
-                mimeType = 'audio/mpeg'
-              } else if (message.fileType === 'video') {
-                mimeType = 'video/mp4'
+              // 处理文件URL - 如果是相对路径，转换为完整URL
+              let fileUrl = message.content
+              if (fileUrl && !fileUrl.startsWith('http')) {
+                // 使用Agent配置中的difyUrl，去掉/v1后缀得到基础URL
+                if (agentConfig?.difyUrl) {
+                  const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+                  fileUrl = `${difyBaseUrl}${fileUrl}`
+                  console.log('[EnhancedChat] 转换流式文件URL:', {
+                    original: message.content,
+                    converted: fileUrl,
+                    agentDifyUrl: agentConfig.difyUrl,
+                    difyBaseUrl: difyBaseUrl
+                  })
+                }
               }
 
               setSessions(prev => prev.map(session =>
@@ -1349,8 +1647,8 @@ export default function EnhancedChatWithSidebar({
                               ...msg,
                               attachments: [...(msg.attachments || []), {
                                 id: nanoid(),
-                                name: fileName,
-                                type: mimeType,
+                                name: `文件_${Date.now()}`,
+                                type: message.fileType || 'image',
                                 url: fileUrl,
                                 size: 0,
                                 source: 'agent' as const
@@ -1371,11 +1669,9 @@ export default function EnhancedChatWithSidebar({
 
               // 优先使用 complete 消息中的完整内容，如果不存在则使用累积的内容
               let finalContent = fullContent
-              if (message.content && typeof message.content === 'string' && message.content.length > fullContent.length) {
+              if (message.content && typeof message.content === 'string') {
                 console.log('[EnhancedChat] 使用 complete 消息中的完整内容，长度:', message.content.length, '累积内容长度:', fullContent.length)
-                finalContent = message.content
-              } else if (message.content && typeof message.content === 'string') {
-                console.log('[EnhancedChat] complete 消息内容长度:', message.content.length, '累积内容长度:', fullContent.length)
+                finalContent = message.content // 总是使用 complete 消息的内容
               }
 
               // 最终检测下载链接
@@ -2134,11 +2430,11 @@ export default function EnhancedChatWithSidebar({
             <Avatar className="w-12 h-12 ring-2 ring-blue-500/30">
               <AvatarImage src={actualAgentAvatar} />
               <AvatarFallback className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold">
-                {agentName[0]}
+                {String(safeAgentName || 'AI')[0] || 'A'}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-semibold text-white">{agentName}</h3>
+              <h3 className="font-semibold text-white">{safeAgentName}</h3>
               <p className="text-sm text-blue-200/70">
                 {currentSession?.title || '新对话'}
               </p>
@@ -2161,7 +2457,7 @@ export default function EnhancedChatWithSidebar({
                           ? 'bg-gradient-to-r from-green-500 to-emerald-500'
                           : 'bg-gradient-to-r from-blue-500 to-cyan-500'
                       }`}>
-                        {isUser ? (actualUserAvatar ? 'U' : '用') : agentName[0]}
+                        {isUser ? (actualUserAvatar ? 'U' : '用') : (String(safeAgentName || 'AI')[0] || 'A')}
                       </AvatarFallback>
                     </Avatar>
 
@@ -2171,27 +2467,31 @@ export default function EnhancedChatWithSidebar({
                         ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg user-message'
                         : 'bg-white/95 text-gray-800 border border-gray-200 shadow-sm'
                     }`} style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                      {message.isStreaming ? (
-                        message.content ? (
-                          <TypewriterEffect content={String(message.content)} speed={20} />
-                        ) : (
-                          <TypingIndicator />
-                        )
-                      ) : (
-                        <EnhancedMessageContent content={String(message.content || '')} />
-                      )}
+                      {(() => {
+                        console.log('[Render] 渲染消息:', {
+                          messageId: message.id,
+                          isStreaming: message.isStreaming,
+                          content: message.content,
+                          contentType: typeof message.content,
+                          contentConstructor: message.content?.constructor?.name
+                        })
 
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          {message.attachments.map((attachment) => (
-                            <AttachmentRenderer
-                              key={attachment.id}
-                              attachment={attachment}
-                              isStreamingComplete={!message.isStreaming}
-                            />
-                          ))}
-                        </div>
-                      )}
+                        if (message.isStreaming) {
+                          if (message.content) {
+                            const safeContent = toText(message.content, '')
+                            console.log('[Render] 流式消息内容:', safeContent)
+                            return <TypewriterEffect content={safeContent} speed={20} />
+                          } else {
+                            return <TypingIndicator />
+                          }
+                        } else {
+                          const safeContent = toText(message.content, '')
+                          console.log('[Render] 静态消息内容:', safeContent)
+                          return <EnhancedMessageContent content={safeContent} agentConfig={agentConfig} attachments={message.attachments} />
+                        }
+                      })()}
+
+                      {/* 附件已经在EnhancedMessageContent中处理，不需要重复渲染 */}
 
                       {/* 下载链接检测和显示 */}
                       {!isUser && !message.isStreaming && (() => {
@@ -2241,8 +2541,11 @@ export default function EnhancedChatWithSidebar({
                                       }
                                     : session
                                 ))
-                                // 重新发送消息
-                                setInput(userMessage.content)
+                                // 重新发送消息 - 确保内容是字符串
+                                const messageContent = typeof userMessage.content === 'string'
+                                  ? userMessage.content
+                                  : String(userMessage.content || '')
+                                setInput(messageContent)
                                 setAttachments(userMessage.attachments || [])
                                 // 延迟一下让状态更新，然后发送
                                 setTimeout(() => sendMessage(), 100)
@@ -2341,7 +2644,7 @@ export default function EnhancedChatWithSidebar({
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={`向${agentName}发送消息...`}
+                placeholder={`向${safeAgentName}发送消息...`}
                 className="min-h-[36px] max-h-24 resize-none bg-transparent border-none text-white placeholder:text-blue-200/50 focus:outline-none focus:ring-0 px-2 text-base"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {

@@ -254,3 +254,55 @@ curl -X POST 'http://192.144.232.60/v1/files/upload' \
 - trace_id 支持 Header（X-Trace-Id）、Query、Body 三种方式传递，优先级依次为 Header > Query > Body。
 
 ---
+{
+"limit": 20,
+"has_more": false,
+"data": [
+    {
+        "id": "d35e006c-7c4d-458f-9142-be4930abdf94",
+        "conversation_id": "957c068b-f258-4f89-ba10-6e8a0361c457",
+        "inputs": {},
+        "query": "draw a cat",
+        "answer": "I have generated an image of a cat for you. Please check your messages to view the image.",
+        "message_files": [
+            {
+                "id": "976990d2-5294-47e6-8f14-7356ba9d2d76",
+                "type": "image",
+                "url": "http://127.0.0.1:5001/files/tools/976990d2-5294-47e6-8f14-7356ba9d2d76.png?timestamp=1705988524&nonce=55df3f9f7311a9acd91bf074cd524092&sign=z43nMSO1L2HBvoqADLkRxr7Biz0fkjeDstnJiCK1zh8=",
+                "belongs_to": "assistant"
+            }
+        ],
+        "feedback": null,
+        "retriever_resources": [],
+        "created_at": 1705988187,
+        "agent_thoughts": [
+            {
+                "id": "592c84cf-07ee-441c-9dcc-ffc66c033469",
+                "chain_id": null,
+                "message_id": "d35e006c-7c4d-458f-9142-be4930abdf94",
+                "position": 1,
+                "thought": "",
+                "tool": "dalle2",
+                "tool_input": "{\"dalle2\": {\"prompt\": \"cat\"}}",
+                "created_at": 1705988186,
+                "observation": "image has been created and sent to user already, you should tell user to check it now.",
+                "files": [
+                    "976990d2-5294-47e6-8f14-7356ba9d2d76"
+                ]
+            },
+            {
+                "id": "73ead60d-2370-4780-b5ed-532d2762b0e5",
+                "chain_id": null,
+                "message_id": "d35e006c-7c4d-458f-9142-be4930abdf94",
+                "position": 2,
+                "thought": "I have generated an image of a cat for you. Please check your messages to view the image.",
+                "tool": "",
+                "tool_input": "",
+                "created_at": 1705988199,
+                "observation": "",
+                "files": []
+            }
+        ]
+    }
+    ]
+}

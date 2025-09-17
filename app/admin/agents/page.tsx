@@ -133,7 +133,7 @@ const platformOptions = [
 
 // 默认平台配置
 const defaultPlatformConfigs = {
-  DIFY: { baseUrl: 'https://api.dify.ai/v1', apiKey: '', timeout: 30000 },
+  DIFY: { baseUrl: 'https://api.dify.ai/v1', apiKey: '', timeout: 300000 },
   RAGFLOW: { baseUrl: 'https://api.ragflow.io/v1', apiKey: '', knowledgeBaseId: '' },
   HIAGENT: { baseUrl: 'https://api.hiagent.com/v1', apiKey: '', agentId: '' },
   OPENAI: { apiKey: '', model: 'gpt-3.5-turbo', baseUrl: 'https://api.openai.com/v1' },

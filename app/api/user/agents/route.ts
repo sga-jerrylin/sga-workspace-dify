@@ -51,12 +51,38 @@ export const GET = withAuth(async (request) => {
       const processedAgents = allAgents.map(agent => {
         const processed = { ...agent }
 
+        // 强制确保所有字符串字段都是字符串 - 终极修复
+        const ensureString = (value: any, fieldName: string) => {
+          if (value === null || value === undefined) return ''
+          if (typeof value === 'string') return value
+          if (typeof value === 'object') {
+            console.warn(`[API] ${fieldName}是对象，强制转换:`, {
+              original: value,
+              type: typeof value,
+              constructor: value?.constructor?.name
+            })
+            return JSON.stringify(value)
+          }
+          return String(value)
+        }
+
+        processed.chineseName = ensureString(processed.chineseName, 'chineseName')
+        processed.englishName = ensureString(processed.englishName, 'englishName')
+        processed.position = ensureString(processed.position, 'position')
+
         console.log(`[API] 处理Agent ${agent.chineseName}:`, {
           id: agent.id,
           platform: agent.platform,
           platformConfig: agent.platformConfig,
           originalDifyUrl: agent.difyUrl,
-          originalDifyKey: agent.difyKey ? '***' : undefined
+          originalDifyKey: agent.difyKey ? '***' : undefined,
+          // 详细调试chineseName
+          chineseName: agent.chineseName,
+          chineseNameType: typeof agent.chineseName,
+          chineseNameConstructor: agent.chineseName?.constructor?.name,
+          chineseNameJSON: JSON.stringify(agent.chineseName),
+          isString: typeof agent.chineseName === 'string',
+          rawAgentKeys: Object.keys(agent)
         })
 
         // 如果是DIFY平台，提取配置到兼容字段
@@ -133,6 +159,25 @@ export const GET = withAuth(async (request) => {
     // 处理Agent数据，提取平台配置到兼容字段
     const processedUserAgents = userAgents.map(agent => {
       const processed = { ...agent }
+
+      // 强制确保所有字符串字段都是字符串 - 终极修复
+      const ensureString = (value: any, fieldName: string) => {
+        if (value === null || value === undefined) return ''
+        if (typeof value === 'string') return value
+        if (typeof value === 'object') {
+          console.warn(`[API] 用户Agent ${fieldName}是对象，强制转换:`, {
+            original: value,
+            type: typeof value,
+            constructor: value?.constructor?.name
+          })
+          return JSON.stringify(value)
+        }
+        return String(value)
+      }
+
+      processed.chineseName = ensureString(processed.chineseName, 'chineseName')
+      processed.englishName = ensureString(processed.englishName, 'englishName')
+      processed.position = ensureString(processed.position, 'position')
 
       console.log(`[API] 处理用户Agent ${agent.chineseName}:`, {
         id: agent.id,

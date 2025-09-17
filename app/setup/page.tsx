@@ -14,14 +14,9 @@ export default function SystemSetupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
-    username: 'admin',
     userId: 'admin',
     phone: '13800000000',
-    email: 'admin@example.com',
-    password: 'Admin123456',
-    confirmPassword: 'Admin123456',
-    displayName: '系统管理员',
-    position: 'CEO'
+    password: '123456'
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,13 +30,6 @@ export default function SystemSetupPage() {
     setIsLoading(true)
     setError('')
 
-    // 验证密码确认
-    if (formData.password !== formData.confirmPassword) {
-      setError('密码确认不匹配')
-      setIsLoading(false)
-      return
-    }
-
     try {
       const response = await fetch('/api/system/init-admin', {
         method: 'POST',
@@ -49,13 +37,9 @@ export default function SystemSetupPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: formData.username,
           userId: formData.userId,
           phone: formData.phone,
-          email: formData.email,
-          password: formData.password,
-          displayName: formData.displayName,
-          position: formData.position
+          password: formData.password
         }),
       })
 
@@ -110,30 +94,12 @@ export default function SystemSetupPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-
-              <div className="space-y-2">
-                <Label htmlFor="username" className="flex items-center gap-2 text-blue-200">
-                  <User className="w-4 h-4" />
-                  用户名
-                </Label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  value={formData.username}
-                  onChange={handleInputChange}
-                  placeholder="输入用户名（用于登录）"
-                  required
-                  disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
-                />
-              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="userId" className="flex items-center gap-2 text-blue-200">
@@ -146,11 +112,12 @@ export default function SystemSetupPage() {
                   type="text"
                   value={formData.userId}
                   onChange={handleInputChange}
-                  placeholder="输入用户ID（系统标识）"
+                  placeholder="输入用户ID（用于登录）"
                   required
                   disabled={isLoading}
                   className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
                 />
+                <p className="text-xs text-blue-300/60">这将作为您的登录用户名</p>
               </div>
 
               <div className="space-y-2">
@@ -172,60 +139,6 @@ export default function SystemSetupPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="flex items-center gap-2 text-blue-200">
-                  <Mail className="w-4 h-4" />
-                  邮箱
-                </Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  placeholder="输入邮箱地址"
-                  required
-                  disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="displayName" className="flex items-center gap-2 text-blue-200">
-                  <User className="w-4 h-4" />
-                  显示名称
-                </Label>
-                <Input
-                  id="displayName"
-                  name="displayName"
-                  type="text"
-                  value={formData.displayName}
-                  onChange={handleInputChange}
-                  placeholder="输入显示名称"
-                  required
-                  disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="position" className="flex items-center gap-2 text-blue-200">
-                  <Briefcase className="w-4 h-4" />
-                  职位
-                </Label>
-                <Input
-                  id="position"
-                  name="position"
-                  type="text"
-                  value={formData.position}
-                  onChange={handleInputChange}
-                  placeholder="输入职位"
-                  required
-                  disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="password" className="flex items-center gap-2 text-blue-200">
                   <Lock className="w-4 h-4" />
                   密码
@@ -236,25 +149,7 @@ export default function SystemSetupPage() {
                   type="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  placeholder="输入密码"
-                  required
-                  disabled={isLoading}
-                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="flex items-center gap-2 text-blue-200">
-                  <Lock className="w-4 h-4" />
-                  确认密码
-                </Label>
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  placeholder="再次输入密码"
+                  placeholder="输入密码（至少6位）"
                   required
                   disabled={isLoading}
                   className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"

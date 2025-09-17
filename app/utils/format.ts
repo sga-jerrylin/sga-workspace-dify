@@ -4,7 +4,7 @@ export function prettyObject(msg: any) {
     msg = JSON.stringify(msg, null, "  ");
   }
   if (msg === "{}") {
-    return obj.toString();
+    return "{}"; // 返回空对象的字符串表示，而不是 [object Object]
   }
   if (msg.startsWith("```json")) {
     return msg;

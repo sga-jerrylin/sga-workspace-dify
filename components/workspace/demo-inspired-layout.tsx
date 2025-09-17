@@ -43,6 +43,7 @@ import {
   Video,
   Phone
 } from "lucide-react"
+import { toText } from '@/app/utils/text'
 
 interface Agent {
   id: string
@@ -119,15 +120,27 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
   // 调试：打印Agent数据
   useEffect(() => {
     if (realAgents.length > 0) {
-      console.log('Agent数据调试:', realAgents.map(agent => ({
-        id: agent.id,
-        name: agent.chineseName,
-        isOnline: agent.isOnline,
-        platform: agent.platform,
-        difyUrl: agent.difyUrl,
-        difyKey: agent.difyKey ? '***' : undefined,
-        platformConfig: agent.platformConfig
-      })))
+      console.log('=== DemoLayout Agent数据调试 ===')
+      realAgents.forEach((agent, index) => {
+        console.log(`DemoLayout Agent ${index}:`, {
+          id: agent.id,
+          chineseName: agent.chineseName,
+          chineseNameType: typeof agent.chineseName,
+          chineseNameConstructor: agent.chineseName?.constructor?.name,
+          isString: typeof agent.chineseName === 'string',
+          stringValue: String(agent.chineseName),
+          isOnline: agent.isOnline,
+          platform: agent.platform,
+          difyUrl: agent.difyUrl,
+          difyKey: agent.difyKey ? '***' : undefined,
+          // 额外调试信息
+          rawAgent: JSON.stringify(agent, null, 2),
+          chineseNameJSON: JSON.stringify(agent.chineseName),
+          chineseNameToString: agent.chineseName?.toString(),
+          objectKeys: Object.keys(agent.chineseName || {}),
+          isObjectLike: typeof agent.chineseName === 'object' && agent.chineseName !== null
+        })
+      })
     }
   }, [realAgents])
 
@@ -268,14 +281,23 @@ export default function DemoInspiredLayout({ user, agents, sessions, company }: 
 
   // 开始聊天处理函数
   const handleStartChat = (agent: Agent) => {
+    // 使用toText确保所有字符串字段都是安全的字符串
+    const safeAgent = {
+      ...agent,
+      chineseName: toText(agent.chineseName, 'AI助手'),
+      englishName: toText(agent.englishName, ''),
+      position: toText(agent.position, '')
+    }
+
     console.log('开始聊天 - 完整Agent数据:', {
-      id: agent.id,
-      chineseName: agent.chineseName,
-      platform: agent.platform,
-      isOnline: agent.isOnline,
-      difyUrl: agent.difyUrl,
-      difyKey: agent.difyKey ? `${agent.difyKey.substring(0, 10)}...` : undefined,
-      platformConfig: agent.platformConfig
+      id: safeAgent.id,
+      chineseName: safeAgent.chineseName,
+      chineseNameType: typeof safeAgent.chineseName,
+      platform: safeAgent.platform,
+      isOnline: safeAgent.isOnline,
+      difyUrl: safeAgent.difyUrl,
+      difyKey: safeAgent.difyKey ? `${safeAgent.difyKey.substring(0, 10)}...` : undefined,
+      platformConfig: safeAgent.platformConfig
     })
 
     // 检查Agent是否在线且有必要的配置

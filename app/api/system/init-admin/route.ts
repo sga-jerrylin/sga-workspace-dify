@@ -5,28 +5,28 @@ import prisma from '@/lib/prisma'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { username, userId, phone, email, password, displayName, position } = body
+    const { userId, phone, password } = body
 
     // 验证必填字段
-    if (!username || !userId || !phone || !email || !password || !displayName || !position) {
+    if (!userId || !phone || !password) {
       return NextResponse.json(
-        { success: false, error: '所有字段都是必填的' },
+        { success: false, error: '用户ID、手机号和密码都是必填的' },
         { status: 400 }
       )
     }
 
-    // 验证用户名格式
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    // 验证用户ID格式
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(userId)) {
       return NextResponse.json(
-        { success: false, error: '用户名只能包含字母、数字和下划线，长度3-20位' },
+        { success: false, error: '用户ID只能包含字母、数字和下划线，长度3-20位' },
         { status: 400 }
       )
     }
 
-    // 验证邮箱格式
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // 验证手机号格式
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
       return NextResponse.json(
-        { success: false, error: '邮箱格式不正确' },
+        { success: false, error: '请输入正确的手机号格式' },
         { status: 400 }
       )
     }
@@ -99,17 +99,17 @@ export async function POST(request: NextRequest) {
       // 创建密码哈希 - 使用与登录验证一致的轮数
       const passwordHash = await bcrypt.hash(password, 10)
 
-      // 创建管理员用户
+      // 创建管理员用户，使用默认值填充其他字段
       const adminUser = await prisma.user.create({
         data: {
           companyId: company.id,
-          username,
+          username: userId, // 使用 userId 作为用户名
           userId,
           phone,
           passwordHash,
-          chineseName: displayName,
-          englishName: displayName,
-          email,
+          chineseName: '系统管理员',
+          englishName: 'System Admin',
+          email: `${userId}@sologenai.com`, // 生成默认邮箱
           role: 'ADMIN',
           isActive: true,
         }
@@ -128,7 +128,6 @@ export async function POST(request: NextRequest) {
           username: adminUser.username,
           email: adminUser.email,
           displayName: adminUser.chineseName,
-          position: position,
           role: adminUser.role
         }
       })

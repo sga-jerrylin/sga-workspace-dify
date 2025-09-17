@@ -5,7 +5,7 @@ const DEFAULT_DIFY_BASE_URL = "http://192.144.232.60/v1";
 const DEFAULT_DIFY_API_KEY = "app-P0zICVDnPuLSteB4iM7SClQi";
 
 // 超时和重试配置
-const DIFY_TIMEOUT_MS = 180000; // 180秒，适应工具调用的长时间需求
+const DIFY_TIMEOUT_MS = 300000; // 300秒，适应工具调用的长时间需求
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000]; // 指数退避：1s, 2s, 4s
 
@@ -316,6 +316,15 @@ export async function POST(req: NextRequest) {
                   }
                 }
                 console.log('[Dify Chat] 解析的数据:', data);
+                console.log('[Dify Chat] 事件类型:', data.event);
+                console.log('[Dify Chat] data.answer 类型:', typeof data.answer);
+                console.log('[Dify Chat] data.answer 值:', data.answer);
+
+                // 检查是否有其他可能包含内容的字段
+                if (data.thought) {
+                  console.log('[Dify Chat] data.thought 类型:', typeof data.thought);
+                  console.log('[Dify Chat] data.thought 值:', data.thought);
+                }
 
                 // 转换Dify格式到OpenAI格式
                 if ((data.event === 'message' || data.event === 'agent_message') && data.answer !== undefined) {
@@ -407,6 +416,10 @@ export async function POST(req: NextRequest) {
                     });
                   }
 
+                  // 确保content是字符串
+                  const contentString = typeof data.answer === 'string' ? data.answer :
+                                       data.answer ? JSON.stringify(data.answer) : '';
+
                   const openaiFormat = {
                     id: data.message_id || 'dify-msg',
                     object: 'chat.completion.chunk',
@@ -417,7 +430,7 @@ export async function POST(req: NextRequest) {
                     choices: [{
                       index: 0,
                       delta: {
-                        content: data.answer
+                        content: contentString
                       },
                       finish_reason: null
                     }]

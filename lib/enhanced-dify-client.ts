@@ -35,7 +35,7 @@ export class EnhancedDifyClient {
   private isWarmedUp = false
 
   // 超时配置
-  private static readonly TIMEOUT_MS = 300000 // 5分钟超时
+  private static readonly TIMEOUT_MS = 300000 // 300秒超时
 
   constructor(config: DifyClientConfig) {
     this.config = {
@@ -84,7 +84,7 @@ export class EnhancedDifyClient {
 
       // 设置超时
       this.currentTimeoutId = setTimeout(() => {
-        console.warn('[DifyClient] 请求超时（5分钟），正在取消...')
+        console.warn('[DifyClient] 请求超时（300秒），正在取消...')
         if (this.currentController) {
           this.currentController.abort()
         }
