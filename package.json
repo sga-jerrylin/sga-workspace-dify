@@ -9,7 +9,9 @@
     "start": "next start",
     "init-admin": "node init-admin.js",
     "force-init-admin": "npx tsx scripts/force-init-admin.ts",
-    "create-admin": "npx tsx scripts/create-admin-user.ts"
+    "create-admin": "npx tsx scripts/create-admin-user.ts",
+    "check-admin": "npx tsx scripts/check-admin.ts",
+    "db:status": "npx tsx scripts/check-db-connection.ts"
   },
   "dependencies": {
     "@fortaine/fetch-event-source": "^3.0.6",

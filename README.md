@@ -1,10 +1,13 @@
-# 🚀 SGA Workspace - Enterprise AI Agent Management Platform
+# SGA Workspace - Dify 集成增强版
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/sologenai/sga-workspace/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/sga-jerrylin/sga-workspace-dify/releases)
 [![Docker](https://img.shields.io/badge/docker-ready-green.svg)](https://docker.com)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Dify](https://img.shields.io/badge/Dify-integrated-orange.svg)](https://dify.ai)
 
-**SGA Workspace** is a comprehensive enterprise-grade AI agent management platform that enables organizations to deploy, manage, and interact with multiple AI agents in a unified environment.
+🚀 **现代化工作空间应用，完美集成 Dify AI 平台**
+
+基于 Next.js 构建的现代工作空间应用，具备 AI 驱动的聊天功能和全面的工作空间管理能力。本版本专门针对 Dify 集成进行了深度优化，完美解决了图片显示、消息渲染等关键问题。
 
 ## ✨ Key Features
 
