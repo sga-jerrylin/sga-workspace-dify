@@ -178,7 +178,10 @@ const TypingIndicator = ({ duration = 0 }: { duration?: number }) => {
     if (elapsed < 60) return '正在处理复杂任务...'
     if (elapsed < 120) return '任务处理中，请稍候...'
     if (elapsed < 180) return '复杂任务处理中，请耐心等待...'
-    return '处理时间较长，即将完成...'
+    if (elapsed < 300) return '处理时间较长，请继续等待...'
+    if (elapsed < 420) return '正在处理复杂工具调用...'
+    if (elapsed < 540) return '即将完成，请稍候...'
+    return '处理时间超长，可能遇到复杂问题...'
   }
 
   return (
@@ -1662,7 +1665,7 @@ export default function EnhancedChatWithSidebar({
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
-      isStreaming: true
+      isStreaming: false // 阻塞模式不需要流式状态
     }
 
     // 更新会话
@@ -1681,7 +1684,7 @@ export default function EnhancedChatWithSidebar({
     setInput('')
     setAttachments([])
     setIsLoading(true)
-    setIsStreaming(true)
+    setIsStreaming(false) // 阻塞模式不需要流式状态
     setRequestStartTime(Date.now())
 
     try {
@@ -1734,219 +1737,138 @@ export default function EnhancedChatWithSidebar({
       await difyClientRef.current.sendMessage(
         messageContent,
         (message: DifyStreamMessage) => {
-          console.log('[EnhancedChat] 收到流式消息:', message)
+          console.log('[EnhancedChat] 收到阻塞消息:', message)
 
-          switch (message.type) {
-            case 'content':
-              // 累积流式内容 - 确保内容是字符串
-              const contentToAdd = message.content
-              if (typeof contentToAdd === 'string' && contentToAdd.length > 0) {
-                fullContent += contentToAdd
-                console.log('[EnhancedChat] 累积内容:', {
-                  newContent: contentToAdd,
-                  fullContentLength: fullContent.length,
-                  fullContentPreview: fullContent.substring(0, 100) + (fullContent.length > 100 ? '...' : '')
-                })
-              } else {
-                console.warn('[EnhancedChat] 收到非字符串内容:', contentToAdd, typeof contentToAdd)
-              }
+          // 阻塞模式只处理 complete 消息
+          if (message.type === 'complete') {
+            // 更新会话ID
+            if (message.conversationId) {
+              conversationId = message.conversationId
+              console.log('[EnhancedChat] 更新会话ID:', conversationId)
+            }
 
-              // 更新会话ID（如果消息中包含）
-              if (message.conversationId) {
-                conversationId = message.conversationId
-                console.log('[EnhancedChat] 从流式消息更新会话ID:', conversationId)
-              }
+            // 获取完整内容
+            const finalContent = typeof message.content === 'string' ? message.content : String(message.content)
+            console.log('[EnhancedChat] 完整响应内容长度:', finalContent.length)
 
-              // 检测下载链接并生成文件附件
-              const detectedAttachments = detectDownloadLinks(fullContent)
+            // 检测下载链接
+            const detectedAttachments = detectDownloadLinks(finalContent)
+            console.log('[EnhancedChat] 检测到的附件:', detectedAttachments)
 
-              // 实时更新消息内容和附件 - 恢复参考文件的逻辑
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: fullContent,
-                              attachments: detectedAttachments.length > 0 ? detectedAttachments : msg.attachments,
-                              isStreaming: true // 确保在流式过程中保持流式状态
-                            }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
+            // 处理API返回的附件
+            let finalAttachments = detectedAttachments
+            if (message.metadata?.attachments && Array.isArray(message.metadata.attachments)) {
+              console.log('[EnhancedChat] 处理API返回的附件:', message.metadata.attachments)
 
-              console.log('[EnhancedChat] 更新消息内容:', {
-                messageId: assistantMessage.id,
-                contentLength: fullContent.length,
-                contentPreview: fullContent.substring(0, 200) + (fullContent.length > 200 ? '...' : ''),
-                attachmentsCount: detectedAttachments.length
-              })
-              break
+              const apiAttachments = message.metadata.attachments.map(att => ({
+                ...att,
+                source: 'agent' as const
+              }))
 
-            case 'thinking':
-              // 处理思考过程 - 不累积到最终内容，单独处理
-              const thinkingContent = typeof message.content === 'string' ? message.content : String(message.content)
-              // 思考过程不累积到 fullContent，避免重复
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? { ...msg, content: fullContent }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
-              break
+              finalAttachments = [...apiAttachments, ...detectedAttachments]
 
-            case 'file':
-              // 处理文件消息
-              console.log('[EnhancedChat] 收到文件:', message.content)
+              // 去重（基于URL）
+              const uniqueAttachments = finalAttachments.filter((attachment, index, self) =>
+                index === self.findIndex(a => a.url === attachment.url)
+              )
+              finalAttachments = uniqueAttachments
+            }
 
-              // 处理文件URL - 如果是相对路径，转换为完整URL
-              let fileUrl = message.content
-              if (fileUrl && !fileUrl.startsWith('http')) {
-                // 使用Agent配置中的difyUrl，去掉/v1后缀得到基础URL
-                if (agentConfig?.difyUrl) {
-                  const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
-                  fileUrl = `${difyBaseUrl}${fileUrl}`
-                  console.log('[EnhancedChat] 转换流式文件URL:', {
-                    original: message.content,
-                    converted: fileUrl,
-                    agentDifyUrl: agentConfig.difyUrl,
-                    difyBaseUrl: difyBaseUrl
-                  })
-                }
-              }
+            // 更新消息
+            setSessions(prev => prev.map(session =>
+              session.id === currentSessionId
+                ? {
+                    ...session,
+                    messages: session.messages.map(msg =>
+                      msg.id === assistantMessage.id
+                        ? {
+                            ...msg,
+                            content: finalContent,
+                            attachments: finalAttachments.length > 0 ? finalAttachments : undefined,
+                            isStreaming: false
+                          }
+                        : msg
+                    ),
+                    conversationId: conversationId,
+                    difyConversationId: conversationId || session.difyConversationId
+                  }
+                : session
+            ))
 
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              attachments: [...(msg.attachments || []), {
-                                id: nanoid(),
-                                name: `文件_${Date.now()}`,
-                                type: message.fileType || 'image',
-                                url: fileUrl,
-                                size: 0,
-                                source: 'agent' as const
-                              }]
-                            }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
-              break
+            // 更新全局状态
+            setIsLoading(false)
+            setIsStreaming(false)
+          } else if (message.type === 'error') {
+            console.error('[EnhancedChat] 收到错误消息:', message.content)
 
-            case 'complete':
-              // 消息完成
-              if (message.conversationId) {
-                conversationId = message.conversationId
-              }
+            const errorContent = `❌ 处理过程中出现错误：${message.content}\n\n💡 请重新发送消息或联系管理员。`
 
-              // 优先使用 complete 消息中的完整内容，如果不存在则使用累积的内容
-              let finalContent = fullContent
-              if (message.content && typeof message.content === 'string') {
-                console.log('[EnhancedChat] 使用 complete 消息中的完整内容，长度:', message.content.length, '累积内容长度:', fullContent.length)
-                finalContent = message.content // 总是使用 complete 消息的内容
-              }
+            setSessions(prev => prev.map(session =>
+              session.id === currentSessionId
+                ? {
+                    ...session,
+                    messages: session.messages.map(msg =>
+                      msg.id === assistantMessage.id
+                        ? {
+                            ...msg,
+                            content: errorContent,
+                            isStreaming: false,
+                            hasError: true
+                          }
+                        : msg
+                    )
+                  }
+                : session
+            ))
 
-              // 最终检测下载链接
-              const finalDetectedAttachments = detectDownloadLinks(finalContent)
-              console.log('[EnhancedChat] 最终检测到的附件:', finalDetectedAttachments)
-
-              // 处理附件信息（优先使用API返回的附件，然后是检测到的附件）
-              let finalAttachments = finalDetectedAttachments
-              if (message.metadata?.attachments && Array.isArray(message.metadata.attachments)) {
-                console.log('[EnhancedChat] 处理API返回的附件:', message.metadata.attachments)
-
-                // 确保API返回的附件也标记为 'agent'
-                const apiAttachments = message.metadata.attachments.map(att => ({
-                  ...att,
-                  source: 'agent' as const
-                }))
-
-                finalAttachments = [...apiAttachments, ...finalDetectedAttachments]
-
-                // 去重（基于URL）
-                const uniqueAttachments = finalAttachments.filter((attachment, index, self) =>
-                  index === self.findIndex(a => a.url === attachment.url)
-                )
-                finalAttachments = uniqueAttachments
-              }
-
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: finalContent,
-                              attachments: finalAttachments.length > 0 ? finalAttachments : msg.attachments,
-                              isStreaming: false
-                            }
-                          : msg
-                      ),
-                      conversationId: conversationId,
-                      difyConversationId: conversationId || session.difyConversationId
-                    }
-                  : session
-              ))
-
-              // 确保全局状态也更新
-              setIsStreaming(false)
-              setIsLoading(false)
-              break
-
-            case 'error':
-              console.error('[EnhancedChat] 收到错误消息:', message.content)
-
-              // 优雅处理流式错误，不直接抛出，而是更新消息内容
-              const errorContent = `❌ 处理过程中出现错误：${message.content}\n\n💡 请重新发送消息或联系管理员。`
-
-              setSessions(prev => prev.map(session =>
-                session.id === currentSessionId
-                  ? {
-                      ...session,
-                      messages: session.messages.map(msg =>
-                        msg.id === assistantMessage.id
-                          ? {
-                              ...msg,
-                              content: fullContent + '\n\n' + errorContent,
-                              isStreaming: false,
-                              hasError: true
-                            }
-                          : msg
-                      )
-                    }
-                  : session
-              ))
-
-              // 设置流式状态为完成
-              setIsStreaming(false)
-              setIsLoading(false)
-              break
-
-            default:
-              console.log('[EnhancedChat] 未处理的消息类型:', message.type, message)
+            setIsLoading(false)
+            setIsStreaming(false)
           }
         },
         (error: Error) => {
           console.error('Dify 客户端错误:', error)
-          throw error
+
+          // 不要立即抛出错误，而是通过消息流处理
+          let errorMessage = '处理过程中出现错误'
+
+          if (error.message.includes('timeout') || error.message.includes('超时') || error.message.includes('aborted') || error.name === 'AbortError') {
+            errorMessage = '⏰ 请求超时（10分钟），AI响应时间过长'
+          } else if (error.message.includes('network') || error.message.includes('fetch')) {
+            errorMessage = '🌐 网络连接错误，请检查网络连接'
+          } else if (error.message.includes('401')) {
+            errorMessage = '🔑 API密钥无效，请联系管理员'
+          } else if (error.message.includes('429')) {
+            errorMessage = '⚡ 请求过于频繁，请稍后重试'
+          } else if (error.message.includes('500')) {
+            errorMessage = '🔧 服务器内部错误，请稍后重试'
+          } else {
+            errorMessage = `❌ 发送失败：${error.message}`
+          }
+
+          // 通过消息流发送错误信息，而不是抛出异常
+          const errorContent = `${errorMessage}\n\n💡 提示：\n• 您可以重新发送消息继续对话\n• 或者尝试简化问题后重新提问\n• 如果问题持续，请联系管理员`
+
+          setSessions(prev => prev.map(session =>
+            session.id === currentSessionId
+              ? {
+                  ...session,
+                  messages: session.messages.map(msg =>
+                    msg.id === assistantMessage.id
+                      ? {
+                          ...msg,
+                          content: fullContent + (fullContent ? '\n\n' : '') + errorContent,
+                          isStreaming: false,
+                          hasError: true
+                        }
+                      : msg
+                  )
+                }
+              : session
+          ))
+
+          // 设置流式状态为完成
+          setIsStreaming(false)
+          setIsLoading(false)
         },
         undefined, // onComplete
         difyFiles // 传递文件参数
@@ -1955,50 +1877,41 @@ export default function EnhancedChatWithSidebar({
     } catch (error) {
       console.error('发送消息失败:', error)
 
-      // 根据错误类型提供更友好的错误信息
-      let errorMessage = '抱歉，发送消息时出现错误';
+      // 只处理那些没有被 onError 回调处理的错误
+      // 如果错误已经通过 onError 回调处理，这里就不需要重复处理了
+      if (error instanceof Error && !error.message.includes('已通过回调处理')) {
+        let errorMessage = '抱歉，发送消息时出现未预期的错误';
 
-      if (error instanceof Error) {
-        console.log('[EnhancedChat] 错误详情:', {
+        console.log('[EnhancedChat] 未处理的错误详情:', {
           message: error.message,
           name: error.name,
           stack: error.stack?.substring(0, 200)
         })
 
-        if (error.message.includes('timeout') || error.message.includes('超时') || error.message.includes('aborted') || error.name === 'AbortError') {
-          errorMessage = '⏰ 请求超时（2分钟），AI响应时间过长。\n\n💡 提示：\n• 可能是网络问题或AI服务繁忙\n• 您可以重新发送消息继续对话\n• 或者尝试简化问题后重新提问\n• 如果问题持续，请检查网络连接或联系管理员';
-        } else if (error.message.includes('用户停止了生成') || error.message.includes('生成已停止')) {
+        if (error.message.includes('用户停止了生成') || error.message.includes('生成已停止')) {
           errorMessage = '⏹️ 生成已停止\n\n您可以重新发送消息继续对话。';
-        } else if (error.message.includes('network') || error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
-          errorMessage = '🌐 网络连接错误，请检查网络连接后重试。\n\n💡 提示：可能是网络不稳定或服务暂时不可用。';
-        } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-          errorMessage = '🔑 API密钥无效，请联系管理员检查配置。';
-        } else if (error.message.includes('429') || error.message.includes('Too Many Requests')) {
-          errorMessage = '⚡ 请求过于频繁，请稍后重试。';
-        } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
-          errorMessage = '🔧 服务器内部错误，请稍后重试或联系管理员。';
         } else {
           errorMessage = `❌ 发送失败：${error.message}\n\n💡 如果问题持续，请联系管理员。`;
         }
-      }
 
-      setSessions(prev => prev.map(session =>
-        session.id === currentSessionId
-          ? {
-              ...session,
-              messages: session.messages.map(msg =>
-                msg.id === assistantMessage.id
-                  ? {
-                      ...msg,
-                      content: errorMessage,
-                      isStreaming: false,
-                      hasError: true
-                    }
-                  : msg
-              )
-            }
-          : session
-      ))
+        setSessions(prev => prev.map(session =>
+          session.id === currentSessionId
+            ? {
+                ...session,
+                messages: session.messages.map(msg =>
+                  msg.id === assistantMessage.id
+                    ? {
+                        ...msg,
+                        content: errorMessage,
+                        isStreaming: false,
+                        hasError: true
+                      }
+                    : msg
+                )
+              }
+            : session
+        ))
+      }
     } finally {
       setIsLoading(false)
       setIsStreaming(false)
@@ -2700,19 +2613,9 @@ export default function EnhancedChatWithSidebar({
                           contentConstructor: message.content?.constructor?.name
                         })
 
-                        if (message.isStreaming) {
-                          if (message.content) {
-                            const safeContent = toText(message.content, '')
-                            console.log('[Render] 流式消息内容:', safeContent)
-                            return <TypewriterEffect
-                              content={safeContent}
-                              speed={20}
-                              agentConfig={agentConfig}
-                              attachments={message.attachments}
-                            />
-                          } else {
-                            return <TypingIndicator />
-                          }
+                        // 阻塞模式：如果正在加载且是助手消息，显示加载指示器
+                        if (isLoading && !isUser && message.content === '') {
+                          return <TypingIndicator />
                         } else {
                           const safeContent = toText(message.content, '')
                           console.log('[Render] 静态消息内容:', safeContent)
@@ -2893,15 +2796,37 @@ export default function EnhancedChatWithSidebar({
               />
             </div>
 
-            {isStreaming ? (
+            {isLoading ? (
               <Button
                 onClick={() => {
-                  // 停止当前的流式响应
+                  console.log('[EnhancedChat] 用户手动停止请求')
+
+                  // 停止当前请求
                   if (difyClientRef.current) {
                     difyClientRef.current.stopCurrentRequest()
                   }
-                  setIsStreaming(false)
+
+                  // 更新当前消息的状态
+                  setSessions(prev => prev.map(session =>
+                    session.id === currentSessionId
+                      ? {
+                          ...session,
+                          messages: session.messages.map(msg =>
+                            msg.content === '' && msg.role === 'assistant'
+                              ? {
+                                  ...msg,
+                                  content: '⏹️ 请求已停止',
+                                  isStreaming: false
+                                }
+                              : msg
+                          )
+                        }
+                      : session
+                  ))
+
                   setIsLoading(false)
+                  setIsStreaming(false)
+                  setRequestStartTime(null)
                 }}
                 className="bg-red-600 hover:bg-red-700 text-white h-8 w-8 p-0 rounded-full"
                 title="停止生成"

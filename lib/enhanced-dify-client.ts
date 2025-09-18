@@ -35,7 +35,7 @@ export class EnhancedDifyClient {
   private isWarmedUp = false
 
   // 超时配置
-  private static readonly TIMEOUT_MS = 240000 // 240秒超时（4分钟）
+  private static readonly TIMEOUT_MS = 600000 // 600秒超时（10分钟）
 
   constructor(config: DifyClientConfig) {
     this.config = {
@@ -62,7 +62,7 @@ export class EnhancedDifyClient {
 
 
   /**
-   * 发送消息到 Dify (通过内部 API 路由以支持文件链接检测)
+   * 发送消息到 Dify (阻塞模式，简化处理逻辑)
    */
   async sendMessage(
     query: string,
@@ -84,7 +84,7 @@ export class EnhancedDifyClient {
 
       // 设置超时
       this.currentTimeoutId = setTimeout(() => {
-        console.warn('[DifyClient] 请求超时（240秒），正在取消...')
+        console.warn('[DifyClient] 请求超时（600秒），正在取消...')
         if (this.currentController) {
           this.currentController.abort()
         }
@@ -99,7 +99,7 @@ export class EnhancedDifyClient {
         hasApiKey: !!this.config.apiKey
       })
 
-      // 构建 OpenAI 格式的请求体，通过内部 API 路由
+      // 构建阻塞模式的请求体，通过内部 API 路由
       const requestBody: any = {
         model: 'dify-agent',
         messages: [
@@ -108,7 +108,7 @@ export class EnhancedDifyClient {
             content: query
           }
         ],
-        stream: true,
+        stream: false, // 改为阻塞模式
         user: this.config.userId,
         // 传递 agent 配置
         agentConfig: {
@@ -142,7 +142,8 @@ export class EnhancedDifyClient {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      await this.processOpenAIStreamResponse(response, onMessage, onError, onComplete)
+      // 阻塞模式：直接获取完整响应
+      await this.processBlockingResponse(response, onMessage, onError, onComplete)
 
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
@@ -150,7 +151,7 @@ export class EnhancedDifyClient {
         onError?.(error)
       } else if (error instanceof Error && error.name === 'AbortError') {
         console.warn('[DifyClient] 请求被取消（可能是超时）')
-        onError?.(new Error('请求超时（4分钟），AI响应时间过长，请稍后重试'))
+        onError?.(new Error('请求超时（10分钟），AI响应时间过长，请稍后重试'))
       }
     } finally {
       // 清理超时
@@ -162,7 +163,68 @@ export class EnhancedDifyClient {
   }
 
   /**
-   * 处理 OpenAI 格式的流式响应
+   * 处理阻塞模式的响应
+   */
+  private async processBlockingResponse(
+    response: Response,
+    onMessage: (message: DifyStreamMessage) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ) {
+    try {
+      const data = await response.json()
+      console.log('[DifyClient] 阻塞响应数据:', data)
+
+      // 提取响应内容和元数据
+      let content = ''
+      let messageId: string | null = null
+      let conversationId: string | null = null
+      let attachments: any[] = []
+
+      // 处理不同的响应格式
+      if (data.choices && data.choices[0]) {
+        // OpenAI 格式
+        const choice = data.choices[0]
+        content = choice.message?.content || ''
+        messageId = data.id
+        conversationId = data.conversation_id
+        attachments = choice.message?.attachments || []
+      } else if (data.answer) {
+        // Dify 原生格式
+        content = data.answer
+        messageId = data.message_id
+        conversationId = data.conversation_id
+        attachments = data.message_files || []
+      } else {
+        throw new Error('未知的响应格式')
+      }
+
+      // 更新会话ID
+      if (conversationId) {
+        this.conversationId = conversationId
+        console.log('[DifyClient] 更新会话ID:', conversationId)
+      }
+
+      // 发送完整内容
+      onMessage({
+        type: 'complete',
+        content: content,
+        messageId: messageId || undefined,
+        conversationId: conversationId || undefined,
+        metadata: { attachments },
+        isComplete: true
+      })
+
+      onComplete?.()
+
+    } catch (error) {
+      console.error('[DifyClient] 阻塞响应处理错误:', error)
+      onError?.(error as Error)
+    }
+  }
+
+  /**
+   * 处理 OpenAI 格式的流式响应 (已废弃，保留用于兼容)
    */
   private async processOpenAIStreamResponse(
     response: Response,

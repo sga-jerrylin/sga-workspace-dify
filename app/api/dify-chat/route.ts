@@ -5,7 +5,7 @@ const DEFAULT_DIFY_BASE_URL = "http://192.144.232.60/v1";
 const DEFAULT_DIFY_API_KEY = "app-P0zICVDnPuLSteB4iM7SClQi";
 
 // 超时和重试配置
-const DIFY_TIMEOUT_MS = 300000; // 300秒，适应工具调用的长时间需求
+const DIFY_TIMEOUT_MS = 600000; // 600秒（10分钟），适应工具调用的长时间需求
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000]; // 指数退避：1s, 2s, 4s
 
@@ -173,10 +173,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 根据请求决定响应模式
+    const isStreamMode = body.stream !== false; // 默认流式，除非明确指定为false
+
     const difyRequestBody = {
       inputs: {},
       query: query,
-      response_mode: "streaming", // 强制使用流式输出
+      response_mode: isStreamMode ? "streaming" : "blocking", // 支持阻塞模式
       user: userId,
       ...(body.conversation_id && { conversation_id: body.conversation_id }), // 如果有conversation_id则传递
       ...(files.length > 0 && { files }) // 如果有文件则传递
@@ -242,8 +245,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Dify总是返回流式响应
-    if (true) {
+    // 根据响应模式处理
+    if (isStreamMode) {
       console.log("[Dify Chat] 处理流式响应");
       
       // 创建转换流，将Dify格式转换为OpenAI格式
@@ -773,10 +776,46 @@ export async function POST(req: NextRequest) {
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       });
-    }
+    } else {
+      // 阻塞模式：直接返回完整响应
+      console.log("[Dify Chat] 处理阻塞响应");
 
-    // 这里不应该到达，因为Dify总是返回流式响应
-    return NextResponse.json({ error: "Unexpected non-streaming response" }, { status: 500 });
+      try {
+        const data = await response.json();
+        console.log("[Dify Chat] 阻塞响应数据:", data);
+
+        // 转换为OpenAI格式
+        const openaiResponse = {
+          id: data.message_id || `dify-${Date.now()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: 'dify-agent',
+          conversation_id: data.conversation_id,
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: data.answer || '',
+              attachments: data.message_files || []
+            },
+            finish_reason: 'stop'
+          }],
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+          }
+        };
+
+        return NextResponse.json(openaiResponse);
+      } catch (parseError) {
+        console.error("[Dify Chat] 解析阻塞响应失败:", parseError);
+        return NextResponse.json(
+          { error: "解析响应失败" },
+          { status: 500 }
+        );
+      }
+    }
 
   } catch (error) {
     console.error("[Dify Chat] 错误:", error);
@@ -785,8 +824,8 @@ export async function POST(req: NextRequest) {
     let errorMessage = "服务暂时不可用，请稍后重试";
     let statusCode = 500;
 
-    if (error.name === 'AbortError') {
-      errorMessage = "请求超时（4分钟），Dify服务响应时间过长。如果您在使用复杂任务，请稍后重试";
+    if ((error as any).name === 'AbortError') {
+      errorMessage = "请求超时（10分钟），Dify服务响应时间过长。如果您在使用复杂任务，请稍后重试";
       statusCode = 408; // Request Timeout
     } else if (error.message?.includes('fetch')) {
       errorMessage = "无法连接到Dify服务，请检查网络连接";

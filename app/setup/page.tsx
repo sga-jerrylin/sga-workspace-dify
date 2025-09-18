@@ -30,30 +30,63 @@ export default function SystemSetupPage() {
     setIsLoading(true)
     setError('')
 
+    // 基本验证
+    if (!formData.userId.trim()) {
+      setError('用户ID不能为空')
+      setIsLoading(false)
+      return
+    }
+
+    if (!formData.phone.trim()) {
+      setError('手机号不能为空')
+      setIsLoading(false)
+      return
+    }
+
+    if (!formData.password.trim()) {
+      setError('密码不能为空')
+      setIsLoading(false)
+      return
+    }
+
+    if (formData.password.length < 4) {
+      setError('密码长度至少4位')
+      setIsLoading(false)
+      return
+    }
+
     try {
+      console.log('开始系统初始化...', { userId: formData.userId })
+
       const response = await fetch('/api/system/init-admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: formData.userId,
-          phone: formData.phone,
+          userId: formData.userId.trim(),
+          phone: formData.phone.trim(),
           password: formData.password
         }),
       })
 
       const data = await response.json()
+      console.log('初始化响应:', data)
 
-      if (data.success) {
-        // 初始化成功，跳转到登录页面
-        router.push('/auth/login?message=系统初始化成功，请使用管理员账户登录')
+      if (response.ok && data.success) {
+        // 初始化成功，等待一下再跳转
+        console.log('系统初始化成功，准备跳转到登录页面')
+        setTimeout(() => {
+          router.push('/auth/login?message=' + encodeURIComponent('系统初始化成功！请使用管理员账户登录'))
+        }, 1000)
       } else {
-        setError(data.error || '系统初始化失败')
+        const errorMsg = data.error || data.message || '系统初始化失败'
+        console.error('初始化失败:', errorMsg)
+        setError(errorMsg)
       }
     } catch (error) {
-      console.error('系统初始化错误:', error)
-      setError('网络错误，请稍后重试')
+      console.error('系统初始化网络错误:', error)
+      setError('网络连接失败，请检查网络后重试')
     } finally {
       setIsLoading(false)
     }
@@ -77,8 +110,11 @@ export default function SystemSetupPage() {
           <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-xl shadow-blue-500/25">
             <Building className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">系统初始化</h1>
-          <p className="text-blue-200/70 mt-2">创建第一个管理员账户</p>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">🎉 欢迎使用 AI 工作空间</h1>
+          <p className="text-blue-200/70 mt-2">请创建第一个管理员账户来开始使用系统</p>
+          <div className="mt-4 text-sm text-blue-300/60">
+            <p>✨ 这是一个一次性设置，完成后即可正常使用系统</p>
+          </div>
         </div>
 
         <Card className="border border-blue-500/20 shadow-2xl bg-slate-900/80 backdrop-blur-xl">
@@ -87,10 +123,10 @@ export default function SystemSetupPage() {
           <CardHeader className="text-center">
             <CardTitle className="flex items-center justify-center gap-2 text-2xl font-bold bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
               <Shield className="w-5 h-5 text-blue-400" />
-              管理员账户设置
+              创建管理员账户
             </CardTitle>
             <CardDescription className="text-blue-200/70">
-              这将是系统的第一个管理员账户，拥有所有权限
+              请填写管理员账户信息，这将是系统的超级管理员
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -117,7 +153,7 @@ export default function SystemSetupPage() {
                   disabled={isLoading}
                   className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
                 />
-                <p className="text-xs text-blue-300/60">这将作为您的登录用户名</p>
+                <p className="text-xs text-blue-300/60">建议使用 admin 或您的英文名</p>
               </div>
 
               <div className="space-y-2">
@@ -149,7 +185,7 @@ export default function SystemSetupPage() {
                   type="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  placeholder="输入密码（至少6位）"
+                  placeholder="输入密码（至少4位）"
                   required
                   disabled={isLoading}
                   className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
@@ -175,7 +211,8 @@ export default function SystemSetupPage() {
         </Card>
 
         <div className="text-center mt-6 text-sm text-blue-200/70">
-          <p>系统初始化后，您可以使用此账户登录管理系统</p>
+          <p>💡 创建成功后，系统将自动跳转到登录页面</p>
+          <p className="mt-1">🔐 请记住您设置的用户名和密码</p>
         </div>
       </div>
     </div>

@@ -4,149 +4,154 @@ import prisma from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🚀 开始系统初始化...')
+
     const body = await request.json()
     const { userId, phone, password } = body
 
+    console.log('📝 接收到初始化请求:', { userId, phone: phone?.substring(0, 3) + '****' })
+
     // 验证必填字段
-    if (!userId || !phone || !password) {
+    if (!userId?.trim() || !phone?.trim() || !password?.trim()) {
+      console.log('❌ 必填字段验证失败')
       return NextResponse.json(
         { success: false, error: '用户ID、手机号和密码都是必填的' },
         { status: 400 }
       )
     }
 
-    // 验证用户ID格式
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(userId)) {
+    // 验证用户ID格式（更宽松）
+    if (!/^[a-zA-Z0-9_]{2,30}$/.test(userId.trim())) {
+      console.log('❌ 用户ID格式验证失败')
       return NextResponse.json(
-        { success: false, error: '用户ID只能包含字母、数字和下划线，长度3-20位' },
+        { success: false, error: '用户ID只能包含字母、数字和下划线，长度2-30位' },
         { status: 400 }
       )
     }
 
-    // 验证手机号格式
-    if (!/^1[3-9]\d{9}$/.test(phone)) {
+    // 验证手机号格式（更宽松，支持更多格式）
+    if (!/^1[3-9]\d{9}$/.test(phone.trim()) && !/^\d{10,15}$/.test(phone.trim())) {
+      console.log('❌ 手机号格式验证失败')
       return NextResponse.json(
-        { success: false, error: '请输入正确的手机号格式' },
+        { success: false, error: '请输入正确的手机号格式（11位数字）' },
         { status: 400 }
       )
     }
 
-    // 验证密码强度
-    if (password.length < 6) {
+    // 验证密码强度（更宽松）
+    if (password.length < 4) {
+      console.log('❌ 密码长度验证失败')
       return NextResponse.json(
-        { success: false, error: '密码长度至少6位' },
+        { success: false, error: '密码长度至少4位' },
         { status: 400 }
       )
     }
 
     try {
-      // 检查是否已有用户（排除系统超级管理员）
-      const existingUserCount = await prisma.user.count({
-        where: {
-          NOT: {
-            id: '00000000-0000-0000-0000-000000000001' // 排除系统超级管理员
-          }
-        }
-      })
+      console.log('🔍 检查系统是否已初始化...')
+
+      // 简单检查：如果有任何用户就认为已初始化
+      const existingUserCount = await prisma.user.count()
+      console.log(`📊 现有用户数量: ${existingUserCount}`)
+
       if (existingUserCount > 0) {
+        console.log('⚠️ 系统已经初始化')
         return NextResponse.json(
-          { success: false, error: '系统已经初始化，不能重复创建管理员' },
+          { success: false, error: '系统已经初始化，不能重复创建管理员账户' },
           { status: 400 }
         )
       }
 
-      // 创建默认公司
+      console.log('🏢 创建或查找默认公司...')
+
+      // 创建默认公司（简化逻辑）
       let company = await prisma.company.findFirst({
         where: { name: 'Solo Genius Agent' }
       })
 
       if (!company) {
+        console.log('📝 创建新公司...')
         company = await prisma.company.create({
           data: {
             name: 'Solo Genius Agent',
-            logoUrl: '/logo.png'
+            logoUrl: '/placeholder-logo.svg'
           }
         })
-        console.log('创建新公司:', company.id)
+        console.log('✅ 公司创建成功:', company.id)
       } else {
-        // 检查现有公司ID格式是否正确
-        const isCuidFormat = /^c[a-z0-9]{24}$/.test(company.id)
-        if (!isCuidFormat) {
-          console.log('发现格式不正确的公司ID:', company.id)
-
-          // 检查是否有关联数据
-          const userCount = await prisma.user.count({ where: { companyId: company.id } })
-          const deptCount = await prisma.department.count({ where: { companyId: company.id } })
-          const agentCount = await prisma.agent.count({ where: { companyId: company.id } })
-
-          if (userCount === 0 && deptCount === 0 && agentCount === 0) {
-            // 如果没有关联数据，删除旧记录并创建新的
-            console.log('删除格式不正确的公司记录并重新创建')
-            await prisma.company.delete({ where: { id: company.id } })
-            company = await prisma.company.create({
-              data: {
-                name: 'Solo Genius Agent',
-                logoUrl: '/logo.png'
-              }
-            })
-            console.log('重新创建公司:', company.id)
-          } else {
-            console.log('公司有关联数据，保持现有记录')
-          }
-        }
+        console.log('✅ 找到现有公司:', company.id)
       }
 
-      // 创建密码哈希 - 使用与登录验证一致的轮数
+      console.log('👤 创建管理员用户...')
+
+      // 创建密码哈希
       const passwordHash = await bcrypt.hash(password, 10)
 
-      // 创建管理员用户，使用默认值填充其他字段
+      // 创建管理员用户
       const adminUser = await prisma.user.create({
         data: {
           companyId: company.id,
-          username: userId, // 使用 userId 作为用户名
-          userId,
-          phone,
+          username: userId.trim(),
+          userId: userId.trim(),
+          phone: phone.trim(),
           passwordHash,
           chineseName: '系统管理员',
           englishName: 'System Admin',
-          email: `${userId}@sologenai.com`, // 生成默认邮箱
+          email: `${userId.trim()}@sologenai.com`,
           role: 'ADMIN',
           isActive: true,
         }
       })
 
-      console.log('系统初始化成功:', {
+      console.log('🎉 管理员用户创建成功!')
+      console.log('📋 用户信息:', {
+        id: adminUser.id,
         username: adminUser.username,
-        userId: adminUser.id
+        userId: adminUser.userId,
+        role: adminUser.role
       })
+
+      console.log('✅ 系统初始化完成!')
 
       return NextResponse.json({
         success: true,
-        message: '系统初始化成功，管理员账户已创建',
-        user: {
-          id: adminUser.id,
-          username: adminUser.username,
-          email: adminUser.email,
-          displayName: adminUser.chineseName,
-          role: adminUser.role
+        message: '🎉 系统初始化成功！管理员账户已创建',
+        data: {
+          user: {
+            id: adminUser.id,
+            username: adminUser.username,
+            userId: adminUser.userId,
+            email: adminUser.email,
+            displayName: adminUser.chineseName,
+            role: adminUser.role
+          },
+          company: {
+            id: company.id,
+            name: company.name
+          }
         }
       })
 
     } catch (dbError) {
-      console.error('数据库操作失败:', dbError)
+      console.error('❌ 数据库操作失败:', dbError)
       return NextResponse.json(
-        { success: false, error: '创建管理员失败，请检查数据库连接' },
+        {
+          success: false,
+          error: '数据库操作失败，请检查数据库连接和配置',
+          details: dbError instanceof Error ? dbError.message : String(dbError)
+        },
         { status: 500 }
       )
     }
 
   } catch (error) {
-    console.error('系统初始化失败:', error)
+    console.error('❌ 系统初始化失败:', error)
 
     return NextResponse.json(
       {
         success: false,
-        error: '系统初始化失败，请稍后重试'
+        error: '系统初始化失败，请稍后重试',
+        details: error instanceof Error ? error.message : String(error)
       },
       { status: 500 }
     )
