@@ -35,7 +35,7 @@ export class EnhancedDifyClient {
   private isWarmedUp = false
 
   // 超时配置
-  private static readonly TIMEOUT_MS = 120000 // 120秒超时（2分钟）
+  private static readonly TIMEOUT_MS = 240000 // 240秒超时（4分钟）
 
   constructor(config: DifyClientConfig) {
     this.config = {
@@ -84,7 +84,7 @@ export class EnhancedDifyClient {
 
       // 设置超时
       this.currentTimeoutId = setTimeout(() => {
-        console.warn('[DifyClient] 请求超时（120秒），正在取消...')
+        console.warn('[DifyClient] 请求超时（240秒），正在取消...')
         if (this.currentController) {
           this.currentController.abort()
         }
@@ -150,7 +150,7 @@ export class EnhancedDifyClient {
         onError?.(error)
       } else if (error instanceof Error && error.name === 'AbortError') {
         console.warn('[DifyClient] 请求被取消（可能是超时）')
-        onError?.(new Error('请求超时（2分钟），AI响应时间过长，请稍后重试'))
+        onError?.(new Error('请求超时（4分钟），AI响应时间过长，请稍后重试'))
       }
     } finally {
       // 清理超时
@@ -229,10 +229,12 @@ export class EnhancedDifyClient {
 
               // 处理内容增量
               if (delta?.content) {
-                fullResponse += delta.content
+                // 确保内容是字符串
+                const contentStr = typeof delta.content === 'string' ? delta.content : String(delta.content)
+                fullResponse += contentStr
                 onMessage({
                   type: 'content',
-                  content: delta.content,
+                  content: contentStr,
                   messageId: messageId || undefined,
                   conversationId: conversationIdFromResponse || undefined,
                   isComplete: false
@@ -261,7 +263,7 @@ export class EnhancedDifyClient {
       // 发送完成消息，包含附件信息
       onMessage({
         type: 'complete',
-        content: fullResponse,
+        content: typeof fullResponse === 'string' ? fullResponse : String(fullResponse),
         messageId: messageId || undefined,
         conversationId: conversationIdFromResponse || undefined,
         metadata: { attachments },
@@ -378,14 +380,23 @@ export class EnhancedDifyClient {
     onMessage: (message: DifyStreamMessage) => void,
     updateState: (response: string, messageId: string | null, conversationId: string | null) => void
   ) {
+    // 辅助函数：确保内容是字符串
+    const ensureString = (value: any): string => {
+      if (value === null || value === undefined) return ''
+      if (typeof value === 'string') return value
+      // 对于非字符串值，直接转换为字符串
+      return String(value)
+    }
+
     switch (data.event) {
       case 'message':
       case 'agent_message':
         if (data.answer) {
-          updateState(data.answer, data.message_id, data.conversation_id)
+          const answerContent = ensureString(data.answer)
+          updateState(answerContent, data.message_id, data.conversation_id)
           onMessage({
             type: 'content',
-            content: data.answer,
+            content: answerContent,
             messageId: data.message_id,
             conversationId: data.conversation_id,
             isComplete: false
@@ -396,9 +407,10 @@ export class EnhancedDifyClient {
       case 'agent_thought':
         // Agent思考过程
         if (data.thought) {
+          const thoughtContent = ensureString(data.thought)
           onMessage({
             type: 'thinking',
-            content: `<think>${data.thought}</think>`,
+            content: `<think>${thoughtContent}</think>`,
             isComplete: false
           })
         }
@@ -412,9 +424,10 @@ export class EnhancedDifyClient {
       case 'message_file':
         // 文件消息
         if (data.url) {
+          const urlContent = ensureString(data.url)
           onMessage({
             type: 'file',
-            content: data.url,
+            content: urlContent,
             fileType: data.type || 'image',
             isComplete: false
           })
@@ -423,9 +436,10 @@ export class EnhancedDifyClient {
 
       case 'error':
         console.error('[DifyClient] 流式错误:', data)
+        const errorMessage = ensureString(data.message || '未知错误')
         onMessage({
           type: 'error',
-          content: `错误: ${data.message || '未知错误'}`,
+          content: `错误: ${errorMessage}`,
           isComplete: false
         })
         break
@@ -438,9 +452,10 @@ export class EnhancedDifyClient {
         console.log('[DifyClient] 未处理的事件类型:', data.event, data)
         // 尝试提取任何可能的文本内容
         if (data.answer || data.content || data.text) {
+          const extractedContent = ensureString(data.answer || data.content || data.text)
           onMessage({
             type: 'content',
-            content: data.answer || data.content || data.text,
+            content: extractedContent,
             isComplete: false
           })
         }

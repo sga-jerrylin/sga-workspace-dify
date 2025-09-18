@@ -37,9 +37,11 @@ import { toText } from '@/app/utils/text'
 interface TypewriterEffectProps {
   content: string
   speed?: number
+  agentConfig?: any
+  attachments?: FileAttachment[]
 }
 
-const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30 }) => {
+const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30, agentConfig, attachments = [] }) => {
   const [displayedContent, setDisplayedContent] = useState('')
   const [currentIndex, setCurrentIndex] = useState(0)
   const contentRef = useRef('')
@@ -80,6 +82,63 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
     }
   }, [currentIndex, speed])
 
+  // 创建与 EnhancedMessageContent 相同的自定义渲染器
+  const renderer = new marked.Renderer()
+
+  // 重写图片渲染逻辑
+  renderer.image = ({ href, title, text }: { href: string; title: string | null; text: string }) => {
+    // 检查这个图片URL是否已经作为附件存在，如果是则不在Markdown中显示
+    const existsAsAttachment = attachments.some(att => {
+      if (!att.url) return false
+
+      // 提取URL的基础部分（去掉查询参数）
+      const baseUrl = att.url.split('?')[0]
+      const hrefBase = href.split('?')[0]
+
+      return baseUrl === hrefBase || baseUrl.endsWith(hrefBase) || hrefBase.endsWith(baseUrl)
+    })
+
+    if (existsAsAttachment) {
+      return '' // 如果已作为附件存在，不在Markdown中显示
+    }
+
+    let imageSrc = href
+
+    // 如果是Dify的相对路径图片，转换为完整URL
+    if (href.startsWith('/files/tools/') && agentConfig?.difyUrl) {
+      const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+      const fullUrl = `${difyBaseUrl}${href}`
+
+      // 对于带签名的Dify URL，需要传递API Key
+      const apiKeyParam = agentConfig?.difyKey ? `&apiKey=${encodeURIComponent(agentConfig.difyKey)}` : ''
+      imageSrc = `/api/proxy-image?url=${encodeURIComponent(fullUrl)}${apiKeyParam}`
+    }
+
+    return `<img src="${imageSrc}" alt="${text}" title="${title || ''}" style="max-width: 400px; max-height: 300px; border-radius: 8px; cursor: pointer;" onclick="window.open('${imageSrc}', '_blank')" />`
+  }
+
+  // 重写链接渲染逻辑，处理Dify的图片下载链接
+  renderer.link = ({ href, title, tokens }: any) => {
+    const text = tokens[0]?.raw || href
+    let linkHref = href
+
+    // 如果是Dify的图片文件链接，检查是否已作为附件存在
+    if (href.startsWith('/files/tools/') && (href.endsWith('.png') || href.endsWith('.jpg') || href.endsWith('.jpeg') || href.endsWith('.gif') || href.endsWith('.webp'))) {
+      const existsAsAttachment = attachments.some(att => att.url && att.url.includes(href))
+      if (existsAsAttachment) {
+        return '' // 如果已作为附件存在，不显示链接
+      }
+    }
+
+    // 如果是Dify的相对路径链接，转换为完整URL
+    if (href.startsWith('/files/tools/') && agentConfig?.difyUrl) {
+      const difyBaseUrl = agentConfig.difyUrl.replace(/\/v1$/, '')
+      linkHref = `${difyBaseUrl}${href}`
+    }
+
+    return `<a href="${linkHref}" title="${title || ''}" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: underline;">${text}</a>`
+  }
+
   return (
     <div
       className="message-content"
@@ -92,7 +151,8 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
         __html: displayedContent ? marked.parse(displayedContent, {
           breaks: true,
           gfm: true,
-          async: false
+          async: false,
+          renderer: renderer
         }) as string : ''
       }}
     />
@@ -116,8 +176,9 @@ const TypingIndicator = ({ duration = 0 }: { duration?: number }) => {
     if (elapsed < 10) return '正在思考中...'
     if (elapsed < 30) return '正在分析问题...'
     if (elapsed < 60) return '正在处理复杂任务...'
-    if (elapsed < 90) return '任务处理中，请稍候...'
-    return '处理时间较长，请耐心等待...'
+    if (elapsed < 120) return '任务处理中，请稍候...'
+    if (elapsed < 180) return '复杂任务处理中，请耐心等待...'
+    return '处理时间较长，即将完成...'
   }
 
   return (
@@ -135,6 +196,87 @@ const TypingIndicator = ({ duration = 0 }: { duration?: number }) => {
       </div>
     </div>
   )
+}
+
+// JSON响应渲染组件
+const JsonResponseRenderer: React.FC<{ content: string, agentConfig?: any, attachments?: FileAttachment[] }> = ({
+  content,
+  agentConfig,
+  attachments
+}) => {
+  const parsedResponse = parseJsonResponse(content)
+
+  if (!parsedResponse.isJsonResponse) {
+    // 如果不是JSON格式，使用普通的Markdown渲染
+    return <EnhancedMessageContent content={content} agentConfig={agentConfig} attachments={attachments} />
+  }
+
+  const { action, content: actionInput } = parsedResponse
+
+  return (
+    <div className="space-y-3">
+      {/* 显示Action类型 */}
+      <div className="flex items-center space-x-2 text-sm mb-3">
+        <div className="px-3 py-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full font-medium text-xs">
+          🤖 {action}
+        </div>
+        <span className="text-gray-500">智能体响应</span>
+      </div>
+
+      {/* 渲染Action Input内容 - 特别优化代码块显示 */}
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-l-4 border-blue-400 rounded-r-lg p-4">
+        <EnhancedMessageContent
+          content={actionInput}
+          agentConfig={agentConfig}
+          attachments={attachments}
+        />
+      </div>
+
+      {/* 可选：显示原始JSON（调试用） */}
+      {process.env.NODE_ENV === 'development' && (
+        <details className="text-xs text-gray-500 mt-2">
+          <summary className="cursor-pointer hover:text-gray-700 select-none">🔍 查看原始JSON</summary>
+          <pre className="mt-2 p-3 bg-gray-100 rounded-lg text-xs overflow-auto border">
+            {JSON.stringify(parsedResponse.originalJson, null, 2)}
+          </pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
+// 解析JSON格式的回复内容
+const parseJsonResponse = (content: string) => {
+  try {
+    // 先清理可能的多余空白字符
+    const trimmedContent = content.trim()
+
+    // 尝试解析JSON
+    const parsed = JSON.parse(trimmedContent)
+
+    console.log('[parseJsonResponse] 解析结果:', parsed)
+
+    // 检查是否是action格式
+    if (parsed.action && parsed.action_input) {
+      console.log('[parseJsonResponse] 检测到JSON格式回复:', {
+        action: parsed.action,
+        contentLength: parsed.action_input.length
+      })
+
+      return {
+        isJsonResponse: true,
+        action: parsed.action,
+        content: parsed.action_input,
+        originalJson: parsed
+      }
+    }
+
+    return { isJsonResponse: false, content }
+  } catch (error) {
+    // 如果不是有效的JSON，返回原内容
+    console.log('[parseJsonResponse] 不是有效JSON，使用原内容')
+    return { isJsonResponse: false, content }
+  }
 }
 
 // 提取下载链接的函数 - 支持DIFY格式的URL
@@ -735,8 +877,8 @@ export default function EnhancedChatWithSidebar({
     const checkTimeout = () => {
       const elapsed = Date.now() - requestStartTime
 
-      // 如果超过90秒还没有响应，给用户一个提示
-      if (elapsed > 90000) {
+      // 如果超过3分钟还没有响应，给用户一个提示
+      if (elapsed > 180000) {
         console.warn('[EnhancedChat] 请求时间过长:', elapsed / 1000, '秒')
         // 可以在这里添加用户提示逻辑
       }
@@ -1930,6 +2072,10 @@ export default function EnhancedChatWithSidebar({
         .message-content {
           font-size: 13px !important;
           line-height: 1.5 !important;
+          max-width: 100% !important;
+          overflow-wrap: break-word !important;
+          word-wrap: break-word !important;
+          box-sizing: border-box !important;
         }
 
         /* 段落样式 - 黑色文字 */
@@ -1956,6 +2102,8 @@ export default function EnhancedChatWithSidebar({
         .message-content .code-block-container {
           position: relative !important;
           margin: 16px 0 !important;
+          max-width: 100% !important;
+          overflow: hidden !important;
         }
 
         .message-content .copy-button {
@@ -1993,9 +2141,15 @@ export default function EnhancedChatWithSidebar({
           padding: 16px !important;
           margin: 0 !important;
           overflow-x: auto !important;
+          max-width: 100% !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
           font-family: 'Fira Code', 'Monaco', 'Consolas', monospace !important;
           font-size: 14px !important;
           line-height: 1.5 !important;
+          white-space: pre-wrap !important;
+          word-wrap: break-word !important;
+          word-break: break-all !important;
         }
 
         .message-content code {
@@ -2011,6 +2165,13 @@ export default function EnhancedChatWithSidebar({
           background: transparent !important;
           padding: 0 !important;
           border-radius: 0 !important;
+          white-space: pre-wrap !important;
+          word-wrap: break-word !important;
+          word-break: break-all !important;
+          display: block !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow-wrap: break-word !important;
         }
 
         /* 图片样式 - 限制大小 */
@@ -2543,14 +2704,26 @@ export default function EnhancedChatWithSidebar({
                           if (message.content) {
                             const safeContent = toText(message.content, '')
                             console.log('[Render] 流式消息内容:', safeContent)
-                            return <TypewriterEffect content={safeContent} speed={20} />
+                            return <TypewriterEffect
+                              content={safeContent}
+                              speed={20}
+                              agentConfig={agentConfig}
+                              attachments={message.attachments}
+                            />
                           } else {
                             return <TypingIndicator />
                           }
                         } else {
                           const safeContent = toText(message.content, '')
                           console.log('[Render] 静态消息内容:', safeContent)
-                          return <EnhancedMessageContent content={safeContent} agentConfig={agentConfig} attachments={message.attachments} />
+
+                          // 检查是否是JSON格式的回复（只在静态消息中处理）
+                          const parsedResponse = parseJsonResponse(safeContent)
+                          if (parsedResponse.isJsonResponse) {
+                            return <JsonResponseRenderer content={safeContent} agentConfig={agentConfig} attachments={message.attachments} />
+                          } else {
+                            return <EnhancedMessageContent content={safeContent} agentConfig={agentConfig} attachments={message.attachments} />
+                          }
                         }
                       })()}
 

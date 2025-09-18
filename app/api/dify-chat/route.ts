@@ -273,15 +273,27 @@ export async function POST(req: NextRequest) {
                 // 处理其他可能的转义问题
                 // 先处理双反斜杠
                 cleanJsonStr = cleanJsonStr.replace(/\\\\/g, '\\');
-                // 然后处理Unicode转义序列
+
+                // 改进的Unicode转义序列处理
                 try {
+                  // 先修复不完整的Unicode转义序列
+                  cleanJsonStr = cleanJsonStr.replace(/\\u([0-9a-fA-F]{1,3})(?![0-9a-fA-F])/g, (match, hex) => {
+                    // 补齐不足4位的Unicode转义序列
+                    const paddedHex = hex.padEnd(4, '0');
+                    return String.fromCharCode(parseInt(paddedHex, 16));
+                  });
+
+                  // 处理完整的Unicode转义序列
                   cleanJsonStr = cleanJsonStr.replace(/\\u([0-9a-fA-F]{4})/g, (match, hex) => {
                     return String.fromCharCode(parseInt(hex, 16));
                   });
+
+                  // 移除任何剩余的无效Unicode转义
+                  cleanJsonStr = cleanJsonStr.replace(/\\u(?![0-9a-fA-F]{4})/g, '');
                 } catch (e) {
                   console.log('[Dify Chat] Unicode转义处理失败:', e);
-                  // 如果Unicode处理失败，尝试移除有问题的Unicode转义
-                  cleanJsonStr = cleanJsonStr.replace(/\\u[0-9a-fA-F]{0,4}/g, '');
+                  // 如果Unicode处理失败，移除所有Unicode转义序列
+                  cleanJsonStr = cleanJsonStr.replace(/\\u[0-9a-fA-F]{0,4}/g, '?');
                 }
 
                 let data;
@@ -294,15 +306,87 @@ export async function POST(req: NextRequest) {
                   // 尝试修复常见的JSON问题
                   let fixedJsonStr = cleanJsonStr;
 
+                  // 移除末尾的不完整内容（可能是截断导致的）
+                  if (fixedJsonStr.endsWith('\\u')) {
+                    fixedJsonStr = fixedJsonStr.slice(0, -2);
+                  } else if (fixedJsonStr.match(/\\u[0-9a-fA-F]{1,3}$/)) {
+                    fixedJsonStr = fixedJsonStr.replace(/\\u[0-9a-fA-F]{1,3}$/, '');
+                  }
+
+                  // 特殊处理：如果是错误事件，尝试提取关键信息
+                  if (fixedJsonStr.includes('"event": "error"')) {
+                    try {
+                      // 尝试提取基本的错误信息，忽略复杂的message字段
+                      const eventMatch = fixedJsonStr.match(/"event":\s*"error"/);
+                      const conversationMatch = fixedJsonStr.match(/"conversation_id":\s*"([^"]+)"/);
+                      const messageIdMatch = fixedJsonStr.match(/"message_id":\s*"([^"]+)"/);
+                      const codeMatch = fixedJsonStr.match(/"code":\s*"([^"]+)"/);
+                      const statusMatch = fixedJsonStr.match(/"status":\s*(\d+)/);
+
+                      if (eventMatch) {
+                        // 构建一个简化的错误对象
+                        const simpleError = {
+                          event: "error",
+                          conversation_id: conversationMatch ? conversationMatch[1] : "",
+                          message_id: messageIdMatch ? messageIdMatch[1] : "",
+                          code: codeMatch ? codeMatch[1] : "unknown",
+                          status: statusMatch ? parseInt(statusMatch[1]) : 500,
+                          message: "API令牌额度已用尽或服务不可用" // 从原始数据推断
+                        };
+
+                        fixedJsonStr = JSON.stringify(simpleError);
+                        console.log('[Dify Chat] 构建简化错误对象:', fixedJsonStr);
+                      }
+                    } catch (e) {
+                      console.log('[Dify Chat] 错误事件简化处理失败:', e);
+                    }
+                  }
+
+                  // 通用JSON修复：处理截断的字符串
+                  if (!fixedJsonStr.includes('"event": "error"')) {
+                    // 对于非错误事件，尝试修复截断的JSON
+
+                    // 1. 如果字符串在message字段中被截断，尝试安全截断
+                    if (fixedJsonStr.includes('"answer":') || fixedJsonStr.includes('"content":')) {
+                      const lastCompleteQuote = fixedJsonStr.lastIndexOf('",');
+                      const lastCompleteField = fixedJsonStr.lastIndexOf('":"');
+
+                      if (lastCompleteQuote > lastCompleteField) {
+                        // 截断到最后一个完整的字段
+                        fixedJsonStr = fixedJsonStr.substring(0, lastCompleteQuote + 1) + '}';
+                      } else {
+                        // 查找最后一个安全的截断点
+                        const safePoints = [
+                          fixedJsonStr.lastIndexOf('。"'),
+                          fixedJsonStr.lastIndexOf('."'),
+                          fixedJsonStr.lastIndexOf('!"'),
+                          fixedJsonStr.lastIndexOf('?"'),
+                          fixedJsonStr.lastIndexOf(' "')
+                        ].filter(pos => pos > 0);
+
+                        if (safePoints.length > 0) {
+                          const safePoint = Math.max(...safePoints);
+                          fixedJsonStr = fixedJsonStr.substring(0, safePoint + 2) + '}';
+                        }
+                      }
+                    }
+                  }
+
                   // 修复未闭合的字符串
                   const openQuotes = (fixedJsonStr.match(/"/g) || []).length;
                   if (openQuotes % 2 !== 0) {
                     fixedJsonStr += '"';
                   }
 
-                  // 修复未闭合的对象
+                  // 修复未闭合的对象和数组
                   const openBraces = (fixedJsonStr.match(/{/g) || []).length;
                   const closeBraces = (fixedJsonStr.match(/}/g) || []).length;
+                  const openBrackets = (fixedJsonStr.match(/\[/g) || []).length;
+                  const closeBrackets = (fixedJsonStr.match(/\]/g) || []).length;
+
+                  for (let i = 0; i < openBrackets - closeBrackets; i++) {
+                    fixedJsonStr += ']';
+                  }
                   for (let i = 0; i < openBraces - closeBraces; i++) {
                     fixedJsonStr += '}';
                   }
@@ -311,7 +395,34 @@ export async function POST(req: NextRequest) {
                     data = JSON.parse(fixedJsonStr);
                     console.log('[Dify Chat] JSON修复成功');
                   } catch (fixError) {
-                    console.log('[Dify Chat] JSON修复失败，跳过此数据块:', fixError);
+                    console.log('[Dify Chat] JSON修复失败，检查是否为错误事件:', fixError, '\n原始数据:', cleanJsonStr);
+
+                    // 如果包含错误关键词，发送一个通用错误消息，但不结束流
+                    if (cleanJsonStr.includes('"event": "error"') || cleanJsonStr.includes('该令牌额度已用尽') || cleanJsonStr.includes('API request failed')) {
+                      console.log('[Dify Chat] 检测到错误事件，发送通用错误消息');
+
+                      // 发送通用错误消息，但不结束流（让其他机制处理结束）
+                      const genericError = {
+                        id: 'dify-error-' + Date.now(),
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: 'dify-agent',
+                        choices: [{
+                          index: 0,
+                          delta: {
+                            content: `❌ **API服务错误**\n\n服务暂时不可用，可能的原因：\n- API令牌额度已用尽\n- 服务配置错误\n- 网络连接问题\n\n请检查API配置或联系管理员。\n\n---\n*错误时间: ${new Date().toLocaleString()}*`
+                          },
+                          finish_reason: null
+                        }]
+                      };
+
+                      controller.enqueue(
+                        new TextEncoder().encode(`data: ${JSON.stringify(genericError)}\n\n`)
+                      );
+
+                      // 不发送结束标记，让流继续或由其他机制结束
+                    }
+
                     continue;
                   }
                 }
@@ -533,8 +644,95 @@ export async function POST(req: NextRequest) {
                   }
                 }
 
-                if (data.event === 'message_end' || data.event === 'agent_message_end') {
-                  console.log('[Dify Chat] 检查文档链接，完整消息内容:', data.answer || '');
+                // 处理错误事件
+                if (data.event === 'error') {
+                  console.log('[Dify Chat] 错误事件:', data);
+
+                  // 解析错误信息
+                  let errorMessage = '服务出现错误，请稍后重试';
+                  let errorDetails = '';
+
+                  if (data.message) {
+                    // 解析具体的错误信息
+                    if (data.message.includes('该令牌额度已用尽')) {
+                      errorMessage = 'API令牌额度已用尽';
+                      errorDetails = '请检查您的API密钥余额，或联系管理员充值';
+                    } else if (data.message.includes('API request failed with status code 401')) {
+                      errorMessage = 'API认证失败';
+                      errorDetails = '请检查API密钥是否正确配置';
+                    } else if (data.message.includes('API request failed with status code 429')) {
+                      errorMessage = '请求频率过高';
+                      errorDetails = '请稍后再试，或升级您的API计划';
+                    } else if (data.message.includes('invalid_param')) {
+                      errorMessage = '参数错误';
+                      errorDetails = '请求参数不正确，请检查输入内容';
+                    } else {
+                      errorMessage = '服务处理失败';
+                      errorDetails = data.message.length > 200 ? data.message.substring(0, 200) + '...' : data.message;
+                    }
+                  }
+
+                  // 发送错误消息
+                  const errorFormat = {
+                    id: data.message_id || 'dify-error',
+                    object: 'chat.completion.chunk',
+                    created: Math.floor(Date.now() / 1000),
+                    model: 'dify-agent',
+                    conversation_id: data.conversation_id,
+                    choices: [{
+                      index: 0,
+                      delta: {
+                        content: `❌ **${errorMessage}**\n\n${errorDetails}\n\n---\n*错误代码: ${data.code || 'unknown'}*`
+                      },
+                      finish_reason: null
+                    }]
+                  };
+
+                  controller.enqueue(
+                    new TextEncoder().encode(`data: ${JSON.stringify(errorFormat)}\n\n`)
+                  );
+
+                  // 不立即结束流，让其他机制处理结束
+                  // 这样可以避免影响超时动画等功能
+                  return; // 错误处理完成，不继续处理其他事件
+                }
+
+                // 处理workflow_finished事件，发送最终答案
+                if (data.event === 'workflow_finished' && data.outputs) {
+                  console.log('[Dify Chat] workflow_finished事件，outputs:', data.outputs);
+
+                  // 尝试从outputs中提取答案
+                  let finalAnswer = '';
+                  if (typeof data.outputs === 'object') {
+                    finalAnswer = data.outputs.answer || data.outputs.result || data.outputs.output || JSON.stringify(data.outputs);
+                  }
+
+                  if (finalAnswer) {
+                    // 发送最终答案内容
+                    const answerFormat = {
+                      id: data.message_id || 'dify-msg',
+                      object: 'chat.completion.chunk',
+                      created: Math.floor(Date.now() / 1000),
+                      model: 'dify-agent',
+                      conversation_id: data.conversation_id,
+                      choices: [{
+                        index: 0,
+                        delta: {
+                          content: finalAnswer
+                        },
+                        finish_reason: null
+                      }]
+                    };
+
+                    controller.enqueue(
+                      new TextEncoder().encode(`data: ${JSON.stringify(answerFormat)}\n\n`)
+                    );
+                  }
+                }
+
+                if (data.event === 'message_end' || data.event === 'agent_message_end' || data.event === 'workflow_finished') {
+                  console.log('[Dify Chat] 结束事件:', data.event);
+
                   const endFormat = {
                     id: data.message_id || 'dify-msg',
                     object: 'chat.completion.chunk',
@@ -588,7 +786,7 @@ export async function POST(req: NextRequest) {
     let statusCode = 500;
 
     if (error.name === 'AbortError') {
-      errorMessage = "请求超时，Dify服务响应时间过长。如果您在使用工具功能，请稍后重试";
+      errorMessage = "请求超时（4分钟），Dify服务响应时间过长。如果您在使用复杂任务，请稍后重试";
       statusCode = 408; // Request Timeout
     } else if (error.message?.includes('fetch')) {
       errorMessage = "无法连接到Dify服务，请检查网络连接";
