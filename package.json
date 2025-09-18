@@ -7,6 +7,7 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
+    "docker:start": "npx wait-on tcp:postgres:5432 -t 30000 && npx prisma generate && npx prisma db push --accept-data-loss && npm run dev",
     "init-admin": "node init-admin.js",
     "quick-init": "node quick-init.js",
     "quick-init:force": "node quick-init.js --force",
@@ -109,6 +110,7 @@
     "tsx": "^4.20.5",
     "use-debounce": "^10.0.5",
     "vaul": "^0.9.9",
+    "wait-on": "^8.0.1",
     "zod": "3.25.67",
     "zustand": "^5.0.8"
   },

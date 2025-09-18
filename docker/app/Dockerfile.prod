@@ -36,5 +36,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
-# 启动开发服务器（与本地一致）
-CMD ["npm", "run", "dev"]
+# 启动应用（包含数据库初始化）
+CMD ["npm", "run", "docker:start"]
