@@ -7,15 +7,22 @@ export async function POST(request: NextRequest) {
     console.log('🚀 开始系统初始化...')
 
     const body = await request.json()
-    const { userId, phone, password } = body
+    const { userId, phone, password, chineseName, englishName, email, companyName } = body
 
-    console.log('📝 接收到初始化请求:', { userId, phone: phone?.substring(0, 3) + '****' })
+    console.log('📝 接收到初始化请求:', {
+      userId,
+      phone: phone?.substring(0, 3) + '****',
+      chineseName,
+      englishName,
+      email,
+      companyName
+    })
 
     // 验证必填字段
-    if (!userId?.trim() || !phone?.trim() || !password?.trim()) {
+    if (!userId?.trim() || !phone?.trim() || !password?.trim() || !chineseName?.trim()) {
       console.log('❌ 必填字段验证失败')
       return NextResponse.json(
-        { success: false, error: '用户ID、手机号和密码都是必填的' },
+        { success: false, error: '用户ID、手机号、密码和中文姓名都是必填的' },
         { status: 400 }
       )
     }
@@ -64,16 +71,19 @@ export async function POST(request: NextRequest) {
 
       console.log('🏢 创建或查找默认公司...')
 
+      // 使用用户提供的公司名称或默认值
+      const finalCompanyName = companyName?.trim() || 'Solo Genius Agent'
+
       // 创建默认公司（简化逻辑）
       let company = await prisma.company.findFirst({
-        where: { name: 'Solo Genius Agent' }
+        where: { name: finalCompanyName }
       })
 
       if (!company) {
-        console.log('📝 创建新公司...')
+        console.log('📝 创建新公司:', finalCompanyName)
         company = await prisma.company.create({
           data: {
-            name: 'Solo Genius Agent',
+            name: finalCompanyName,
             logoUrl: '/placeholder-logo.svg'
           }
         })
@@ -88,6 +98,9 @@ export async function POST(request: NextRequest) {
       const passwordHash = await bcrypt.hash(password, 10)
 
       // 创建管理员用户
+      const finalEmail = email?.trim() || `${userId.trim()}@sologenai.com`
+      const finalEnglishName = englishName?.trim() || 'System Admin'
+
       const adminUser = await prisma.user.create({
         data: {
           companyId: company.id,
@@ -95,9 +108,9 @@ export async function POST(request: NextRequest) {
           userId: userId.trim(),
           phone: phone.trim(),
           passwordHash,
-          chineseName: '系统管理员',
-          englishName: 'System Admin',
-          email: `${userId.trim()}@sologenai.com`,
+          chineseName: chineseName.trim(),
+          englishName: finalEnglishName,
+          email: finalEmail,
           role: 'ADMIN',
           isActive: true,
         }

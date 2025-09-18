@@ -1,0 +1,9 @@
+{
+  "userId": "testadmin",
+  "phone": "13800138001",
+  "password": "test123456",
+  "chineseName": "测试管理员",
+  "englishName": "TestAdmin",
+  "email": "testadmin@test.com",
+  "companyName": "测试公司"
+}

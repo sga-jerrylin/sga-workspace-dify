@@ -16,7 +16,11 @@ export default function SystemSetupPage() {
   const [formData, setFormData] = useState({
     userId: 'admin',
     phone: '13800000000',
-    password: '123456'
+    password: '123456',
+    chineseName: '系统管理员',
+    englishName: 'System Admin',
+    email: 'admin@sologenai.com',
+    companyName: 'Solo Genius Agent'
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,6 +59,19 @@ export default function SystemSetupPage() {
       return
     }
 
+    if (!formData.chineseName.trim()) {
+      setError('中文姓名不能为空')
+      setIsLoading(false)
+      return
+    }
+
+    // 邮箱格式验证（如果填写了的话）
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      setError('邮箱格式不正确')
+      setIsLoading(false)
+      return
+    }
+
     try {
       console.log('开始系统初始化...', { userId: formData.userId })
 
@@ -66,7 +83,11 @@ export default function SystemSetupPage() {
         body: JSON.stringify({
           userId: formData.userId.trim(),
           phone: formData.phone.trim(),
-          password: formData.password
+          password: formData.password,
+          chineseName: formData.chineseName.trim(),
+          englishName: formData.englishName.trim() || 'System Admin',
+          email: formData.email.trim() || `${formData.userId.trim()}@sologenai.com`,
+          companyName: formData.companyName.trim() || 'Solo Genius Agent'
         }),
       })
 
@@ -126,7 +147,9 @@ export default function SystemSetupPage() {
               创建管理员账户
             </CardTitle>
             <CardDescription className="text-blue-200/70">
-              请填写管理员账户信息，这将是系统的超级管理员
+              请填写完整的管理员账户信息，这将是系统的超级管理员
+              <br />
+              <span className="text-red-400">*</span> 标记的字段为必填项
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -140,7 +163,7 @@ export default function SystemSetupPage() {
               <div className="space-y-2">
                 <Label htmlFor="userId" className="flex items-center gap-2 text-blue-200">
                   <User className="w-4 h-4" />
-                  用户ID
+                  用户ID <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="userId"
@@ -159,7 +182,7 @@ export default function SystemSetupPage() {
               <div className="space-y-2">
                 <Label htmlFor="phone" className="flex items-center gap-2 text-blue-200">
                   <User className="w-4 h-4" />
-                  手机号
+                  手机号 <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="phone"
@@ -177,7 +200,7 @@ export default function SystemSetupPage() {
               <div className="space-y-2">
                 <Label htmlFor="password" className="flex items-center gap-2 text-blue-200">
                   <Lock className="w-4 h-4" />
-                  密码
+                  密码 <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="password"
@@ -187,6 +210,75 @@ export default function SystemSetupPage() {
                   onChange={handleInputChange}
                   placeholder="输入密码（至少4位）"
                   required
+                  disabled={isLoading}
+                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="chineseName" className="flex items-center gap-2 text-blue-200">
+                  <User className="w-4 h-4" />
+                  中文姓名 <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  id="chineseName"
+                  name="chineseName"
+                  type="text"
+                  value={formData.chineseName}
+                  onChange={handleInputChange}
+                  placeholder="输入您的中文姓名"
+                  required
+                  disabled={isLoading}
+                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="englishName" className="flex items-center gap-2 text-blue-200">
+                  <User className="w-4 h-4" />
+                  英文姓名
+                </Label>
+                <Input
+                  id="englishName"
+                  name="englishName"
+                  type="text"
+                  value={formData.englishName}
+                  onChange={handleInputChange}
+                  placeholder="输入您的英文姓名（可选）"
+                  disabled={isLoading}
+                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email" className="flex items-center gap-2 text-blue-200">
+                  <Mail className="w-4 h-4" />
+                  邮箱地址
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="输入邮箱地址（可选）"
+                  disabled={isLoading}
+                  className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="companyName" className="flex items-center gap-2 text-blue-200">
+                  <Briefcase className="w-4 h-4" />
+                  公司名称
+                </Label>
+                <Input
+                  id="companyName"
+                  name="companyName"
+                  type="text"
+                  value={formData.companyName}
+                  onChange={handleInputChange}
+                  placeholder="输入公司名称（可选）"
                   disabled={isLoading}
                   className="bg-slate-800/50 border-blue-500/30 text-white placeholder:text-blue-300/50 focus:border-blue-400 focus:ring-blue-400/20"
                 />
