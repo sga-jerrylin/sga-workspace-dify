@@ -100,16 +100,42 @@ const TypewriterEffect: React.FC<TypewriterEffectProps> = ({ content, speed = 30
 }
 
 // 加载动画组件
-const TypingIndicator = () => (
-  <div className="flex items-center space-x-1 p-3">
-    <div className="flex space-x-1">
-      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+const TypingIndicator = ({ duration = 0 }: { duration?: number }) => {
+  const [elapsed, setElapsed] = useState(0)
+
+  useEffect(() => {
+    const startTime = Date.now()
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [])
+
+  const getStatusText = () => {
+    if (elapsed < 10) return '正在思考中...'
+    if (elapsed < 30) return '正在分析问题...'
+    if (elapsed < 60) return '正在处理复杂任务...'
+    if (elapsed < 90) return '任务处理中，请稍候...'
+    return '处理时间较长，请耐心等待...'
+  }
+
+  return (
+    <div className="flex items-center space-x-1 p-3">
+      <div className="flex space-x-1">
+        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+      </div>
+      <div className="flex flex-col ml-2">
+        <span className="text-xs text-slate-400">{getStatusText()}</span>
+        {elapsed > 5 && (
+          <span className="text-xs text-slate-500">已等待 {elapsed} 秒</span>
+        )}
+      </div>
     </div>
-    <span className="text-xs text-slate-400 ml-2">正在思考中...</span>
-  </div>
-)
+  )
+}
 
 // 提取下载链接的函数 - 支持DIFY格式的URL
 const extractFileLinks = (content: string) => {
@@ -698,8 +724,27 @@ export default function EnhancedChatWithSidebar({
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [requestStartTime, setRequestStartTime] = useState<number | null>(null)
   const [attachments, setAttachments] = useState<FileAttachment[]>([])
   const [isUploading, setIsUploading] = useState(false)
+
+  // 监控请求时间，提供用户反馈
+  useEffect(() => {
+    if (!requestStartTime || !isStreaming) return
+
+    const checkTimeout = () => {
+      const elapsed = Date.now() - requestStartTime
+
+      // 如果超过90秒还没有响应，给用户一个提示
+      if (elapsed > 90000) {
+        console.warn('[EnhancedChat] 请求时间过长:', elapsed / 1000, '秒')
+        // 可以在这里添加用户提示逻辑
+      }
+    }
+
+    const timer = setInterval(checkTimeout, 5000) // 每5秒检查一次
+    return () => clearInterval(timer)
+  }, [requestStartTime, isStreaming])
 
   // 历史对话管理
   const [historyConversations, setHistoryConversations] = useState<DifyHistoryConversation[]>([])
@@ -1495,6 +1540,7 @@ export default function EnhancedChatWithSidebar({
     setAttachments([])
     setIsLoading(true)
     setIsStreaming(true)
+    setRequestStartTime(Date.now())
 
     try {
       let fullContent = ''
@@ -1717,6 +1763,10 @@ export default function EnhancedChatWithSidebar({
                     }
                   : session
               ))
+
+              // 确保全局状态也更新
+              setIsStreaming(false)
+              setIsLoading(false)
               break
 
             case 'error':
@@ -1745,6 +1795,7 @@ export default function EnhancedChatWithSidebar({
 
               // 设置流式状态为完成
               setIsStreaming(false)
+              setIsLoading(false)
               break
 
             default:
@@ -1766,8 +1817,16 @@ export default function EnhancedChatWithSidebar({
       let errorMessage = '抱歉，发送消息时出现错误';
 
       if (error instanceof Error) {
-        if (error.message.includes('timeout') || error.message.includes('超时') || error.message.includes('aborted')) {
-          errorMessage = '⏰ 请求超时（5分钟），AI正在处理复杂任务。\n\n💡 提示：\n• 如果AI正在使用工具或进行复杂分析，响应时间可能较长\n• 您可以重新发送消息继续对话\n• 或者尝试简化问题后重新提问';
+        console.log('[EnhancedChat] 错误详情:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack?.substring(0, 200)
+        })
+
+        if (error.message.includes('timeout') || error.message.includes('超时') || error.message.includes('aborted') || error.name === 'AbortError') {
+          errorMessage = '⏰ 请求超时（2分钟），AI响应时间过长。\n\n💡 提示：\n• 可能是网络问题或AI服务繁忙\n• 您可以重新发送消息继续对话\n• 或者尝试简化问题后重新提问\n• 如果问题持续，请检查网络连接或联系管理员';
+        } else if (error.message.includes('用户停止了生成') || error.message.includes('生成已停止')) {
+          errorMessage = '⏹️ 生成已停止\n\n您可以重新发送消息继续对话。';
         } else if (error.message.includes('network') || error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
           errorMessage = '🌐 网络连接错误，请检查网络连接后重试。\n\n💡 提示：可能是网络不稳定或服务暂时不可用。';
         } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
@@ -1801,6 +1860,10 @@ export default function EnhancedChatWithSidebar({
     } finally {
       setIsLoading(false)
       setIsStreaming(false)
+      setRequestStartTime(null)
+      // 确保在任何情况下都清空输入框和附件
+      setInput('')
+      setAttachments([])
     }
   }
 
@@ -2659,7 +2722,16 @@ export default function EnhancedChatWithSidebar({
 
             {isStreaming ? (
               <Button
+                onClick={() => {
+                  // 停止当前的流式响应
+                  if (difyClientRef.current) {
+                    difyClientRef.current.stopCurrentRequest()
+                  }
+                  setIsStreaming(false)
+                  setIsLoading(false)
+                }}
                 className="bg-red-600 hover:bg-red-700 text-white h-8 w-8 p-0 rounded-full"
+                title="停止生成"
               >
                 <StopCircle size={16} />
               </Button>
