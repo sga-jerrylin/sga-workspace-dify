@@ -1,40 +1,29 @@
-# 生产环境Docker - 优化版本
-# 如果Docker Hub连接有问题，可以尝试使用国内镜像
-# FROM registry.cn-hangzhou.aliyuncs.com/google_containers/node:20-alpine
-FROM node:20-alpine
+FROM node:20-slim
 
-# 设置npm镜像源以解决网络问题
 RUN npm config set registry https://registry.npmmirror.com
 
-# 安装必要的系统依赖
-RUN apk add --no-cache libc6-compat curl wget
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+  curl wget ca-certificates python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 复制package文件
 COPY package*.json ./
 
-# 安装所有依赖（现在package-lock.json已经锁定了正确的React 18版本）
-RUN npm ci --legacy-peer-deps --timeout=300000 --retry=3
+# 安装依赖，并确保 sharp 装对
+RUN npm ci --legacy-peer-deps --timeout=300000 --retry=3 \
+  && npm install --os=linux --cpu=x64 sharp --include=optional
 
-# 复制源代码
 COPY . .
 
-# 生成Prisma客户端
 RUN npx prisma generate
 
-# 设置环境变量（与本地开发一致）
-ENV NODE_ENV=development
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# 暴露端口
 EXPOSE 3000
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
-
-# 启动应用（包含数据库初始化）
 CMD ["npm", "run", "docker:start"]
