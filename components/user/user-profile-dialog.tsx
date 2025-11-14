@@ -125,6 +125,7 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
       // 验证必填字段
       if (!formData.chineseName.trim()) {
         setMessage({ type: 'error', text: '中文姓名不能为空' })
+        setIsSaving(false)
         return
       }
 
@@ -132,14 +133,17 @@ export default function UserProfileDialog({ open, onOpenChange }: UserProfileDia
       if (formData.newPassword) {
         if (!formData.currentPassword) {
           setMessage({ type: 'error', text: '请输入当前密码' })
+          setIsSaving(false)
           return
         }
         if (formData.newPassword !== formData.confirmPassword) {
           setMessage({ type: 'error', text: '新密码和确认密码不一致' })
+          setIsSaving(false)
           return
         }
         if (formData.newPassword.length < 6) {
           setMessage({ type: 'error', text: '新密码至少6位' })
+          setIsSaving(false)
           return
         }
       }

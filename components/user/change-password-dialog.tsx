@@ -49,21 +49,25 @@ export default function ChangePasswordDialog({ open, onOpenChange }: ChangePassw
       // 验证必填字段
       if (!formData.currentPassword.trim()) {
         setMessage({ type: 'error', text: '请输入当前密码' })
+        setIsSaving(false)
         return
       }
 
       if (!formData.newPassword.trim()) {
         setMessage({ type: 'error', text: '请输入新密码' })
+        setIsSaving(false)
         return
       }
 
       if (formData.newPassword !== formData.confirmPassword) {
         setMessage({ type: 'error', text: '新密码和确认密码不一致' })
+        setIsSaving(false)
         return
       }
 
       if (formData.newPassword.length < 6) {
         setMessage({ type: 'error', text: '新密码至少6位' })
+        setIsSaving(false)
         return
       }
 

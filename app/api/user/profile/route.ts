@@ -139,8 +139,8 @@ export const PUT = withAuth(async (request) => {
     // 如果要修改密码，验证当前密码
     if (updateData.newPassword && updateData.currentPassword) {
       const currentUser = await prisma.user.findUnique({
-        where: { userId: user.userId }, // 使用userId而不是id
-        select: { password: true }
+        where: { id: user.userId }, // JWT中的userId实际上是数据库的id主键
+        select: { passwordHash: true }
       })
 
       if (!currentUser) {
@@ -156,7 +156,7 @@ export const PUT = withAuth(async (request) => {
       }
 
       // 验证当前密码
-      const isCurrentPasswordValid = await bcrypt.compare(updateData.currentPassword, currentUser.password)
+      const isCurrentPasswordValid = await bcrypt.compare(updateData.currentPassword, currentUser.passwordHash)
       if (!isCurrentPasswordValid) {
         return NextResponse.json(
           {
@@ -182,12 +182,12 @@ export const PUT = withAuth(async (request) => {
     if (updateData.phone !== undefined) updateFields.phone = updateData.phone
     if (updateData.position !== undefined) updateFields.position = updateData.position
     if (updateData.avatarUrl !== undefined) updateFields.avatarUrl = updateData.avatarUrl
-    if (updateData.newPassword) updateFields.password = updateData.newPassword
+    if (updateData.newPassword) updateFields.passwordHash = updateData.newPassword
 
     // 更新用户信息
     const updatedUser = await prisma.user.update({
       where: {
-        id: user.userId, // 使用正确的id字段
+        id: user.userId, // JWT中的userId实际上是数据库的id主键
       },
       data: updateFields,
       select: {
