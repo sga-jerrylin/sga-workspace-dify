@@ -2,18 +2,21 @@ FROM node:20-slim
 
 RUN npm config set registry https://registry.npmmirror.com
 
-# 安装系统依赖
+# 安装系统依赖（包括 Sharp 需要的库）
 RUN apt-get update && apt-get install -y \
   curl wget ca-certificates python3 make g++ \
+  libvips-dev \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package*.json ./
 
-# 安装依赖，并确保 sharp 装对
-RUN npm ci --legacy-peer-deps --timeout=300000 --retry=3 \
-  && npm install --os=linux --cpu=x64 sharp --include=optional
+# 安装依赖
+RUN npm ci --legacy-peer-deps --timeout=300000 --retry=3
+
+# 重新安装 sharp（确保使用正确的二进制文件）
+RUN npm rebuild sharp
 
 COPY . .
 
